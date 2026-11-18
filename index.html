@@ -2092,13 +2092,25 @@ const G = {
       if (d.side === 'top') { const gr = g.createLinearGradient(0, AY0 - 112, 0, AY0); gr.addColorStop(0, '#b4bacb'); gr.addColorStop(1, '#cfd3de'); g.fillStyle = gr; g.fillRect(d.x - 38, AY0 - 116, 76, 116); }
       else { g.fillStyle = '#cfd3de'; g.fillRect(d.side === 'left' ? 0 : AX1, d.y - 40, AX0, 80); }
     }
-    g.fillStyle = WORLD.floor; g.fillRect(AX0, AY0, AX1 - AX0, AY1 - AY0);
-    g.strokeStyle = WORLD.tile; g.lineWidth = 1.5;
+    g.fillStyle = '#e6e8ef'; g.fillRect(AX0, AY0, AX1 - AX0, AY1 - AY0);
+    // every other tile a touch darker, so the floor has some texture
+    g.fillStyle = 'rgba(28,30,51,.022)';
+    for (let x = AX0, i = 0; x < AX1; x += 58, i++) for (let y = AY0, j = 0; y < AY1; y += 56, j++) if ((i + j) % 2) g.fillRect(x, y, 58, 56);
+    g.strokeStyle = '#d8dbe5'; g.lineWidth = 1.5;
     for (let x = AX0 + 58; x < AX1; x += 58) { g.beginPath(); g.moveTo(x, AY0); g.lineTo(x, AY1); g.stroke(); }
     for (let y = AY0 + 56; y < AY1; y += 56) { g.beginPath(); g.moveTo(AX0, y); g.lineTo(AX1, y); g.stroke(); }
-    // a soft light from above
-    const gr = g.createRadialGradient(W / 2, (AY0 + AY1) / 2, 60, W / 2, (AY0 + AY1) / 2, 760);
-    gr.addColorStop(0, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(AX0, AY0, AX1 - AX0, AY1 - AY0);
+    // a few soft pools of light from ceiling lamps (different in every room)
+    const rr = mulberry32((L ? L.n : 1) * 977 + 5);
+    for (let k = 0; k < 3; k++) {
+      const lx = AX0 + 160 + rr() * (AX1 - AX0 - 320), ly = AY0 + 120 + rr() * (AY1 - AY0 - 240);
+      const gr = g.createRadialGradient(lx, ly, 10, lx, ly, 230); gr.addColorStop(0, 'rgba(255,255,255,.32)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(AX0, AY0, AX1 - AX0, AY1 - AY0);
+    }
+    // the room gets darker toward the walls and corners
+    const vg = g.createRadialGradient(W / 2, (AY0 + AY1) / 2, 200, W / 2, (AY0 + AY1) / 2, 720);
+    vg.addColorStop(0, 'rgba(28,30,51,0)'); vg.addColorStop(1, 'rgba(28,30,51,.1)'); g.fillStyle = vg; g.fillRect(AX0, AY0, AX1 - AX0, AY1 - AY0);
+    const wallShade = (x0, y0, x1, y1, a) => { const lg = g.createLinearGradient(x0, y0, x1, y1); lg.addColorStop(0, `rgba(28,30,51,${a})`); lg.addColorStop(1, 'rgba(28,30,51,0)'); g.fillStyle = lg; g.fillRect(AX0, AY0, AX1 - AX0, AY1 - AY0); };
+    wallShade(0, AY0, 0, AY0 + 70, .13); wallShade(AX0, 0, AX0 + 50, 0, .07); wallShade(AX1, 0, AX1 - 50, 0, .07);
     if (L) for (const d of L.doors) if (d.side === 'top') { g.fillStyle = 'rgba(236,51,64,.08)'; g.beginPath(); g.ellipse(d.x, AY0 + 18, 40, 16, 0, 0, TAU); g.fill(); }
   },
 
