@@ -85,7 +85,7 @@
         <div class="k"><span>LEFT CLICK</span></div><div>Shoot / swing &nbsp;·&nbsp; empty hands: grab or punch</div>
         <div class="k"><span>RIGHT CLICK</span><span>Q</span></div><div>Throw what you hold</div>
         <div class="k"><span>E</span></div><div>Pick up / swap</div>
-        <div class="k"><span>HOLD LEFT CLICK</span></div><div>Empty hands, cursor on an enemy: 3 s of lines break him (11 s cooldown)</div>
+        <div class="k"><span>HOLD LEFT CLICK</span></div><div>Empty hands, cursor on an enemy: 3 s of lines break him (11 s cooldown). On a weapon or object: it flies to your hand</div>
         <div class="k"><span>R</span></div><div>Restart the level</div>
         <div class="k"><span>ESC</span><span>M</span></div><div>Pause &nbsp;·&nbsp; mute</div>
       </div>
@@ -765,26 +765,27 @@ const WEP = {
 
 /* how hard a level is: gentle up to level 18, then it keeps climbing hard */
 function diff(L) {
-  const a = Math.min(L, 18) / 18, b = Math.max(0, L - 18);
+  // up to level 14 nothing changes; after that it keeps climbing, but slowly
+  const a = Math.min(L, 14) / 18, c = Math.max(0, L - 14);
   return {
-    total: Math.min(30, L <= 18 ? 3 + Math.floor(L * .5) : 12 + b),
-    maxAlive: Math.min(9, L <= 18 ? 2 + Math.floor(L / 5) : 5 + Math.floor(b / 3)),
-    react: Math.max(.3, lerp(1.0, .7, a) - b * .025),
-    lead: Math.min(.8, lerp(.4, .56, a) + b * .016),
-    spread: Math.max(.25, lerp(1, .7, a) - b * .03),
-    speed: Math.min(150, lerp(88, 104, a) + b * 3),
-    cdMul: Math.max(.45, 1 - b * .03),
-    reach: Math.min(1.9, lerp(1, 1.35, a) + b * .03),     // how far away they start shooting
-    keepAim: lerp(2, .7, a) / (1 + b * .1),            // how fast they lose their aim when you duck out of sight
+    total: Math.min(26, L <= 14 ? 3 + Math.floor(L * .5) : 10 + Math.floor(c * .6)),
+    maxAlive: Math.min(7, L <= 14 ? 2 + Math.floor(L / 5) : 4 + Math.floor(c / 5)),
+    react: Math.max(.45, lerp(1.0, .7, a) - c * .008),
+    lead: Math.min(.7, lerp(.4, .56, a) + c * .006),
+    spread: Math.max(.45, lerp(1, .7, a) - c * .01),
+    speed: Math.min(125, lerp(88, 104, a) + c * 1),
+    cdMul: Math.max(.7, 1 - c * .012),
+    reach: Math.min(1.5, lerp(1, 1.35, a) + c * .01),     // how far away they start shooting
+    keepAim: lerp(2, .7, a) / (1 + c * .03),             // how fast they lose their aim when you duck out of sight
     bullet: 950,
     pool: (L <= 2) ? ['pistol', 'pistol', 'pistol', 'none']
       : (L <= 4) ? ['pistol', 'pistol', 'none', 'bat']
       : (L <= 6) ? ['pistol', 'pistol', 'shotgun', 'none', 'bat']
       : (L <= 9) ? ['pistol', 'pistol', 'shotgun', 'smg', 'none', 'bat']
       : (L <= 12) ? ['pistol', 'pistol', 'shotgun', 'smg', 'katana', 'none', 'bat']
-      : (L <= 17) ? ['pistol', 'pistol', 'shotgun', 'smg', 'rifle', 'katana', 'none', 'bat']
-      : (L <= 22) ? ['pistol', 'shotgun', 'smg', 'rifle', 'katana', 'smg', 'shotgun', 'bat']
-      : ['shotgun', 'smg', 'rifle', 'smg', 'shotgun', 'rifle', 'katana', 'pistol']
+      : (L <= 22) ? ['pistol', 'pistol', 'shotgun', 'smg', 'rifle', 'katana', 'none', 'bat']
+      : (L <= 32) ? ['pistol', 'pistol', 'shotgun', 'smg', 'rifle', 'katana', 'smg', 'bat']
+      : ['pistol', 'shotgun', 'smg', 'rifle', 'katana', 'smg', 'shotgun', 'bat']
   };
 }
 
@@ -1063,7 +1064,9 @@ class Item {
     if (this.state === 'held' || this.dead) return;
     const near = G.player && G.player.alive && G.player.grabTarget === this;
     floorShadow(c, this.x, this.y + (this.restZ > 0 && this.state === 'ground' ? -this.restZ : 0), 9, this.z > 1 && this.state === 'flying' ? .1 : .16);
-    c.save(); c.translate(this.x, this.y - this.z - 3);
+    const lifting = G.players && G.players.some(q => q.alive && q.chargeTarget === this);
+    const lift = lifting ? 3 + Math.sin(G.realT * 9) * 1.5 : 0;
+    c.save(); c.translate(this.x + (lifting ? Math.sin(G.realT * 41) * .6 : 0), this.y - this.z - 3 - lift);
     if (near) {          // a pulsing ring says "you can grab this"
       const k = .5 + .5 * Math.sin(G.realT * 8);
       c.strokeStyle = hexA('#1c1e33', .35 + .35 * k); c.lineWidth = 2.5; c.beginPath(); c.ellipse(0, 3, 17 + k * 3, (17 + k * 3) * .45, 0, 0, TAU); c.stroke();
@@ -1123,7 +1126,7 @@ class Bullet {
    the rest of the world runs on the time you spend moving.
    ========================================================= */
 const PC = { SPEED: 182, ACC: 1500, DEC: 1900, REACH: 50 };
-const MIND = { CHARGE: 3, COOLDOWN: 11 };   // charge in real seconds, cooldown in world seconds
+const MIND = { CHARGE: 3, COOLDOWN: 11, PULL_CHARGE: .8, PULL_COOLDOWN: 5.5, PULL_TIME: .5 };   // charges in real seconds, cooldowns in world seconds
 class Player {
   constructor(x, y) {
     this.isPlayer = true; this.x = x; this.y = y; this.vx = 0; this.vy = 0; this.r = 11; this.hitR = 9;
@@ -1172,13 +1175,16 @@ class Player {
     if (this.noActions) return;      // a guest's copy of themselves: the host decides what happens
     this.cd = Math.max(0, this.cd - gdt - rdt * .22);
     if (this.burstLeft > 0) { this.burstT -= gdt + rdt * .4; if (this.burstT <= 0) this.fireOnce(); }
+    // an item the lines are pulling glides to my hand (real time, so it never hangs)
+    if (this.pulling) this.updatePull(rdt);
     // the lines: hold left click on an enemy with empty hands
     this.mind = Math.max(0, this.mind - gdt);            // cooldown runs on world time
     if (canAct && !this.held && I.isDown('Mouse0') && this.mind <= 0) {
       const t = this.findMindTarget();
       if (t && t === this.chargeTarget) this.charge += rdt;
       else { this.chargeTarget = t; this.charge = 0; if (t) SFX.mindStart(); }
-      if (this.chargeTarget && this.charge >= MIND.CHARGE) this.mindKill(this.chargeTarget);
+      const isItem = this.chargeTarget instanceof Item;
+      if (this.chargeTarget && this.charge >= (isItem ? MIND.PULL_CHARGE : MIND.CHARGE)) isItem ? this.mindPull(this.chargeTarget) : this.mindKill(this.chargeTarget);
     } else { this.chargeTarget = null; this.charge = 0; }
     if (!canAct) return;
     if (I.hit('Mouse0')) this.primary();
@@ -1192,7 +1198,37 @@ class Player {
       const d = dist(m.x, m.y, e.x, e.y - 40);
       if (d < bd && G.level.los(this.x, this.y, e.x, e.y)) { bd = d; best = e; }
     }
+    if (best || this.pulling) return best;
+    // no enemy under the cursor: a weapon or object lying somewhere can be pulled instead
+    bd = 26;
+    for (const it of G.items) {
+      if (it.state !== 'ground' || it.dead || it.pulledBy) continue;
+      const d = dist(m.x, m.y, it.x, it.y - it.z - 3);
+      if (d < bd && dist(this.x, this.y, it.x, it.y) > PC.REACH && G.level.los(this.x, this.y, it.x, it.y)) { bd = d; best = it; }
+    }
     return best;
+  }
+  /* like a telekinetic grab: the item lifts a little, then glides into my hand */
+  mindPull(it) {
+    it.state = 'pulled'; it.pulledBy = this; it.noGrab = 9;
+    this.pulling = { it, t: 0, x0: it.x, y0: it.y, z0: it.z, r0: it.rot };
+    SFX.grab();
+    this.mind = MIND.PULL_COOLDOWN; this.charge = 0; this.chargeTarget = null;
+  }
+  updatePull(rdt) {
+    const P = this.pulling, it = P.it;
+    if (it.dead || it.state !== 'pulled') { this.pulling = null; return; }
+    P.t += rdt / MIND.PULL_TIME;
+    const k = clamp(P.t, 0, 1), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+    const hx = this.x + Math.cos(this.aim) * 16, hy = this.y + Math.sin(this.aim) * 16;
+    it.x = lerp(P.x0, hx, e); it.y = lerp(P.y0, hy, e);
+    it.z = lerp(P.z0, GUN_H - 6, e) + Math.sin(k * Math.PI) * 16;
+    it.rot = P.r0 + angDiff(P.r0, this.aim) * e;
+    if (k >= 1) {
+      this.pulling = null; it.pulledBy = null; it.noGrab = 0;
+      if (this.held || !this.alive) { it.state = 'flying'; it.thrower = null; it.vx = 0; it.vy = 0; it.vz = 60; it.vr = 0; it.noGrab = .3; }
+      else { it.state = 'ground'; this.pickUp(it); }
+    }
   }
   mindKill(e) {
     const a = Math.atan2(e.y - this.y, e.x - this.x);
@@ -1310,6 +1346,7 @@ class Player {
   die(cause, dx = 0, dy = 0) {
     if (!this.alive) return;
     this.alive = false;
+    if (this.pulling) { const it = this.pulling.it; this.pulling = null; it.pulledBy = null; it.noGrab = 0; it.state = 'flying'; it.thrower = null; it.vx = it.vy = 0; it.vz = 40; }
     if (this.held) { const it = this.held; this.held = null; it.state = 'flying'; it.x = this.x; it.y = this.y; it.z = 30; it.vx = dx * 80 + rand(-40, 40); it.vy = dy * 80 + rand(-40, 40); it.vz = 180; it.vr = rand(-10, 10); }
     FX.shards(this.x, this.y, 30, { n: 46, color: [PAL.player.main, PAL.player.dark, PAL.player.light, PAL.player.hi, INKC], angle: Math.atan2(dy, dx), spread: dx || dy ? 1.3 : Math.PI, smin: 60, smax: 330, jx: 8, jy: 4, jz: 22, szmin: 3, szmax: 7.5, lmin: 4, lmax: 7 });
     FX.flash(.5, '#ffffff'); FX.addShake(.6); SFX.die();
@@ -1694,10 +1731,10 @@ function buildSnapshot() {
   return {
     t: 's', ls: G.ls, n: G.levelN, s: G.state, ts: r2(G.ts), rem: G.remaining || 0, hp: G.hearts,
     seq: S ? { t: r2(S.t), mode: S.mode, dur: S.dur, w: S.word ?? -1 } : null,
-    p: G.players.map(q => ({ x: r1(q.x), y: r1(q.y), aim: r2(q.aim), f: q.face, w: r2(q.walk), mv: r2(q.moveAmt), k: r2(q.kick), sw: r2(q.swing), pu: r2(q.punchT), th: r2(q.throwT), al: q.alive ? 1 : 0, v: q.visible ? 1 : 0, h: snapHeld(q.held), mind: r1(q.mind), ct: q.chargeTarget ? q.chargeTarget.id : 0, c: q.cause || '' })),
+    p: G.players.map(q => ({ x: r1(q.x), y: r1(q.y), aim: r2(q.aim), f: q.face, w: r2(q.walk), mv: r2(q.moveAmt), k: r2(q.kick), sw: r2(q.swing), pu: r2(q.punchT), th: r2(q.throwT), al: q.alive ? 1 : 0, v: q.visible ? 1 : 0, h: snapHeld(q.held), mind: r1(q.mind), ct: q.chargeTarget ? (q.chargeTarget instanceof Item ? 'i' : 'e') + q.chargeTarget.id : 0, pl: q.pulling ? q.pulling.it.id : 0, c: q.cause || '' })),
     e: G.enemies.filter(e => e.alive).map(e => ({ id: e.id, x: r1(e.x), y: r1(e.y), aim: r2(e.aim), f: e.face, w: r2(e.walk), mv: r2(e.moveAmt), k: r2(e.kick), sw: r2(e.swing), pu: r2(e.punchT), wu: r2(e.windup), st: r2(e.stun), sp: r2(e.spawnT), sm: r2(e.spawnMax), aT: r2(e.aimT), re: r2(e.react), cd: r2(e.cd), bl: e.burstLeft, h: e.held ? e.held.kind : 0 })),
     b: G.bullets.filter(b => !b.dead).map(b => ({ x: r1(b.x), y: r1(b.y), ox: r1(b.ox), oy: r1(b.oy), vx: r1(b.vx), vy: r1(b.vy), o: b.owner })),
-    it: G.items.filter(i => i.state !== 'held' && !i.dead).map(i => ({ id: i.id, k: i.kind, x: r1(i.x), y: r1(i.y), z: r1(i.z), rz: r1(i.restZ), r: r2(i.rot), s: i.state === 'flying' ? 'f' : 'g', a: i.ammo, pop: r2(i.pop) })),
+    it: G.items.filter(i => i.state !== 'held' && !i.dead).map(i => ({ id: i.id, k: i.kind, x: r1(i.x), y: r1(i.y), z: r1(i.z), rz: r1(i.restZ), r: r2(i.rot), s: i.state === 'flying' ? 'f' : (i.state === 'pulled' ? 'p' : 'g'), a: i.ammo, pop: r2(i.pop) })),
     py: G.pyramid ? { x: r1(G.pyramid.x), y: r1(G.pyramid.y), age: r2(G.pyramid.age), al: G.pyramid.alive ? 1 : 0 } : null,
     ev: NET.ev.slice()
   };
@@ -1720,7 +1757,7 @@ function applyPlayerFields(q, d) {
   q.aim = d.aim; q.face = d.f; q.moveAmt = d.mv; q.kick = Math.max(q.kick || 0, d.k); q.swing = Math.max(q.swing || 0, d.sw); q.punchT = Math.max(q.punchT || 0, d.pu); q.throwT = Math.max(q.throwT || 0, d.th);
   q.alive = !!d.al; q.visible = !!d.v; q.mind = d.mind; q.cause = d.c;
   if (!q.held || !d.h || q.held.kind !== d.h.k) q.held = fakeHeld(d.h); else { q.held.ammo = d.h.a; q.held.hp = d.h.h; }
-  q.ctId = d.ct;
+  q.ctId = d.ct; q.plId = d.pl;
 }
 function applySnapshot(S) {
   const firstTime = G.ls !== S.ls;
@@ -1751,8 +1788,7 @@ function applySnapshot(S) {
   }
   G.enemies = next;
   const eById = new Map(next.map(e => [e.id, e]));
-  if (me) me.chargeTarget = me.ctId ? eById.get(me.ctId) || null : null;
-  if (other) other.chargeTarget = other.ctId ? eById.get(other.ctId) || null : null;
+  G._eById = eById;
   // bullets: snap, then the guest moves them forward until the next snapshot
   G.bullets = S.b.map(d => { const b = Object.create(Bullet.prototype); Object.assign(b, { x: d.x, y: d.y, ox: d.ox, oy: d.oy, vx: d.vx, vy: d.vy, owner: d.o, dead: false }); return b; });
   // items
@@ -1760,11 +1796,14 @@ function applySnapshot(S) {
   for (const d of S.it) {
     let it = iById.get(d.id);
     if (!it || it.kind !== d.k) { it = Object.create(Item.prototype); Object.assign(it, { id: d.id, kind: d.k, def: WEP[d.k], x: d.x, y: d.y, z: d.z, vx: 0, vy: 0, vz: 0, vr: 0, dead: false, noGrab: 0, thrower: null, owner: null, hp: 1 }); }
-    it.tx = d.x; it.ty = d.y; it.z = d.z; it.restZ = d.rz; it.rot = d.r; it.state = d.s === 'f' ? 'flying' : 'ground'; it.ammo = d.a; it.pop = d.pop;
+    it.tx = d.x; it.ty = d.y; it.z = d.z; it.restZ = d.rz; it.rot = d.r; it.state = d.s === 'f' ? 'flying' : (d.s === 'p' ? 'pulled' : 'ground'); if (d.s !== 'p') it.pulledBy = null; it.ammo = d.a; it.pop = d.pop;
     if (d.s !== 'f') { it.x = d.x; it.y = d.y; }
     items.push(it);
   }
   G.items = items;
+  const iMap = new Map(items.map(i => [i.id, i]));
+  const findCt = id => !id ? null : (String(id)[0] === 'i' ? iMap.get(+String(id).slice(1)) : eById.get(+String(id).slice(1))) || null;
+  for (const q of [me, other]) if (q) { q.chargeTarget = findCt(q.ctId); for (const it of items) if (it.state === 'pulled' && it.id === q.plId) it.pulledBy = q; }
   // the pyramid
   if (S.py) { if (!G.pyramid) { G.pyramid = Object.create(Pyramid.prototype); Object.assign(G.pyramid, { r: 24, hitT: 0 }); } Object.assign(G.pyramid, { x: S.py.x, y: S.py.y, age: S.py.age, alive: !!S.py.al }); }
   else G.pyramid = null;
@@ -2242,6 +2281,7 @@ const G = {
       c.strokeStyle = INKC; c.lineWidth = 2.4; c.strokeRect(d.x - 38, top, 76, 42); c.lineWidth = 1.8; line(c, d.x - 38, top + 26, d.x + 38, top + 26);
     }
     if (this.state === 'play') for (const q of this.players) if (q.alive && q.chargeTarget && q.chargeTarget.alive !== false) drawMindLines(c, q);
+    for (const it of this.items) if (it.state === 'pulled' && it.pulledBy) drawPullTrail(c, it.pulledBy, it);
     FX.drawAir(c);
     c.setTransform(RS, 0, 0, RS, 0, 0);
     // time overlay: the world goes a touch cold and still when you stop
@@ -2289,7 +2329,7 @@ const G = {
         c.fillStyle = INKC; c.font = '700 19px Fredoka, sans-serif'; c.textAlign = 'center'; c.fillText('BARE HANDS', bx + bw / 2, by + 21);
         c.font = '500 13px Fredoka, sans-serif';
         if (p.mind > 0) { c.fillStyle = '#6a708c'; c.fillText('click: grab / punch · lines in ' + Math.ceil(p.mind) + 's', bx + bw / 2, by + 41); }
-        else { c.fillStyle = '#ec3340'; c.fillText('hold click on an enemy: LINES ready', bx + bw / 2, by + 41); }
+        else { c.fillStyle = '#ec3340'; c.fillText('hold click on an enemy or a weapon: LINES', bx + bw / 2, by + 41); }
       }
     }
     // the flow of time
@@ -2361,8 +2401,8 @@ const G = {
 
 /* the lines: a few thin jittering streaks from your hand to him. No countdown on purpose. */
 function drawMindLines(c, p) {
-  const e = p.chargeTarget;
-  const ax = p.x + Math.cos(p.aim) * 26, ay = p.y - GUN_H + Math.sin(p.aim) * 26, bx = e.x, by = e.y - 42;
+  const e = p.chargeTarget, isItem = e instanceof Item;
+  const ax = p.x + Math.cos(p.aim) * 26, ay = p.y - GUN_H + Math.sin(p.aim) * 26, bx = e.x, by = isItem ? e.y - e.z - 6 : e.y - 42;
   const dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
   c.lineCap = 'round'; c.lineJoin = 'round';
   for (let i = 0; i < 2; i++) {
@@ -2378,6 +2418,11 @@ function drawHeart(c, x, y, full) {
   c.save(); c.translate(x, y); c.beginPath();
   c.moveTo(0, 7); c.bezierCurveTo(-12, -1, -9, -11, 0, -5); c.bezierCurveTo(9, -11, 12, -1, 0, 7); c.closePath();
   c.fillStyle = full ? '#ec3340' : '#ffffff'; c.fill(); c.strokeStyle = INKC; c.lineWidth = 2.6; c.lineJoin = 'round'; c.stroke(); c.restore();
+}
+function drawPullTrail(c, p, it) {
+  const ax = p.x + Math.cos(p.aim) * 26, ay = p.y - GUN_H + Math.sin(p.aim) * 26, bx = it.x, by = it.y - it.z - 3;
+  c.lineCap = 'round'; c.strokeStyle = 'rgba(28,30,51,.25)'; c.lineWidth = 2.4; line(c, ax, ay, bx, by);
+  c.strokeStyle = 'rgba(255,255,255,.7)'; c.lineWidth = 1; line(c, ax, ay, bx, by);
 }
 function inkText(c, s, x, y, size, align = 'left', ow) {
   c.font = `700 ${size}px Fredoka, sans-serif`; c.textAlign = align; c.textBaseline = 'middle'; c.lineJoin = 'round';
