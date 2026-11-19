@@ -1158,6 +1158,15 @@ class Bullet {
     c.restore();
   }
 }
+/* the prop an item is resting on top of (null if it's on the floor) */
+function restBlockOf(it) {
+  let best = null;
+  for (const b of G.level.blocks) {
+    if (b.wall || Math.abs(b.h - it.restZ) > 3) continue;
+    if (it.x >= b.x - 6 && it.x <= b.x + b.w + 6 && it.y >= b.y - 6 && it.y <= b.y + b.d + 6) { best = b; break; }
+  }
+  return best;
+}
 /* =========================================================
    THE PLAYER — a dark faceted mannequin. Walks in real time;
    the rest of the world runs on the time you spend moving.
@@ -1306,7 +1315,14 @@ class Player {
     for (const it of G.items) {
       if (it.dead || it.state === 'held' || it.noGrab > 0) continue;
       if (it.state === 'flying' && it.thrower === this) continue;
-      const d = dist(this.x, this.y, it.x, it.y); if (d > PC.REACH + (it.z > 0 ? 6 : 0)) continue;
+      let d = dist(this.x, this.y, it.x, it.y);
+      if (d > PC.REACH + (it.z > 0 ? 6 : 0)) {
+        // something lying on a table/desk/crate: reachable whenever I'm touching that prop near it
+        const b = it.state === 'ground' && it.restZ > 0 ? restBlockOf(it) : null; if (!b) continue;
+        const cx = clamp(this.x, b.x, b.x + b.w), cy = clamp(this.y, b.y, b.y + b.d);
+        if (dist(this.x, this.y, cx, cy) > this.r + 16 || dist(cx, cy, it.x, it.y) > 84) continue;
+        d = PC.REACH;
+      }
       const score = d + dist(m.x, m.y + GUN_H, it.x, it.y + it.z) * .5;
       if (score < bs) { bs = score; best = it; }
     }
@@ -1727,7 +1743,7 @@ const NET = {
       if (this.host) { this.rin = makeRemoteInput(); this.status('Your friend joined!', 'host'); onNetConnected('host'); }
       else { this.status('Connected! Waiting for the host to start…', 'join'); onNetConnected('guest'); }
     });
-    c.on('data', d => this.onData(d));
+    c.on('data', d => { try { this.onData(d); } catch (e) { logErr('data', e); } });
     c.on('close', () => this.onLost());
     c.on('error', () => this.onLost());
   },
@@ -1984,7 +2000,7 @@ function spawnSpotsFor(L) {
   return out;
 }
 function nearestSpot(spots, mx, my) {
-  let bi = -1, bd = 40;
+  let bi = -1, bd = Infinity;   // a click anywhere picks the closest spot
   spots.forEach((s, i) => { const d = dist(mx, my + 20, s[0], s[1]); if (d < bd) { bd = d; bi = i; } });
   return bi;
 }
@@ -2798,13 +2814,22 @@ fit();
 G.toMenu();
 let lastT = performance.now();
 function frame(now) {
+  requestAnimationFrame(frame);           // schedule first: one bad frame must never freeze the game
   const dt = Math.min(.033, (now - lastT) / 1000); lastT = now;
-  G.update(dt);
-  NET.tick(dt);
+  try { G.update(dt); } catch (e) { logErr('update', e); }
+  try { NET.tick(dt); } catch (e) { logErr('net', e); }
   Input.clear();
-  G.render();
-  requestAnimationFrame(frame);
+  try { G.render(); } catch (e) { logErr('render', e); try { ctx.restore(); ctx.setTransform(1, 0, 0, 1, 0, 0); } catch (_) {} }
 }
+/* errors are kept (last few) so they can be looked at later instead of silently freezing the game */
+const ERR_SEEN = new Set();
+function logErr(where, e) {
+  const msg = where + ': ' + (e && e.message) + ' @ ' + String(e && e.stack || '').split('\n').slice(1, 3).join(' ').trim();
+  if (ERR_SEEN.has(msg)) return; ERR_SEEN.add(msg); console.error(e);
+  try { const L = JSON.parse(localStorage.getItem('stillshot_err') || '[]'); L.push({ t: new Date().toISOString(), s: G.state, L: G.levelN, msg }); localStorage.setItem('stillshot_err', JSON.stringify(L.slice(-20))); } catch (_) {}
+}
+window.addEventListener('error', ev => logErr('window', ev.error || { message: ev.message }));
+window.addEventListener('unhandledrejection', ev => logErr('promise', ev.reason || {}));
 requestAnimationFrame(frame);
 window.__G = G;
 
