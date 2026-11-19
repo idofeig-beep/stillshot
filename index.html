@@ -760,7 +760,7 @@ const WEP = {
   bottle: { name: 'BOTTLE', throwable: 1, breaks: 1, hp: 1, block: 8.5 },
   mug: { name: 'MUG', throwable: 1, breaks: 1, hp: 1, block: 8 },
   ashtray: { name: 'ASHTRAY', throwable: 1, hp: 2, block: 9 },
-  tray: { name: 'TRAY', throwable: 1, hp: 3, block: 15 }
+  tray: { name: 'TRAY', throwable: 1, hp: 3, block: 18 }
 };
 
 /* how hard a level is: gentle up to level 18, then it keeps climbing hard */
@@ -1093,7 +1093,7 @@ function FX_label(c, x, y, s) {
 class Bullet {
   constructor(x, y, a, speed, owner, shooter, o = {}) {
     this.x = x; this.y = y; this.ox = x; this.oy = y; this.vx = Math.cos(a) * speed; this.vy = Math.sin(a) * speed;
-    this.owner = owner; this.shooter = shooter; this.life = o.life || 4; this.pierce = o.pierce || 0; this.dead = false; this.age = 0;
+    this.owner = owner; this.shooter = shooter; this.life = o.life || 4; this.pierce = o.pierce || 0; this.dead = false; this.age = 0; this.volley = o.volley || 0;
   }
   update(dt) {
     if (this.dead) return;
@@ -1363,7 +1363,7 @@ Bullet.prototype.speed = function () { return Math.hypot(this.vx, this.vy); };
 /* =========================================================
    THE RED MEN — faceless crystal. One hit and they shatter.
    ========================================================= */
-let ENEMY_ID = 0;
+let ENEMY_ID = 0, VOLLEY_ID = 0;
 class Enemy {
   constructor(x, y, weapon, o = {}) {
     this.id = ++ENEMY_ID; this.x = x; this.y = y; this.vx = 0; this.vy = 0; this.r = 12; this.hitR = 12;
@@ -1416,7 +1416,7 @@ class Enemy {
         // keep distance, or side-step a little while lining up the shot
         if (d < mn) { mvx = -(tx - this.x) / d; mvy = -(ty - this.y) / d; spd *= .8; }
         else { this.strafeT -= dt; if (this.strafeT <= 0) { this.strafeT = rand(.8, 1.8); this.strafe *= -1; } const sx = -(ty - this.y) / d, sy = (tx - this.x) / d; mvx = sx * this.strafe * .3; mvy = sy * this.strafe * .3; }
-        if (this.aimT >= this.react && this.cd <= 0 && this.burstLeft <= 0) { this.burstLeft = def.burst || 1; this.burstT = 0; this.cd = rand(def.ecd[0], def.ecd[1]) * this.D.cdMul; }
+        if (this.aimT >= this.react && this.cd <= 0 && this.burstLeft <= 0) { this.burstLeft = def.burst || 1; this.burstT = 0; this.volley = ++VOLLEY_ID; this.cd = rand(def.ecd[0], def.ecd[1]) * this.D.cdMul; }
       } else {
         this.aimT = Math.max(0, this.aimT - dt * this.D.keepAim);
         const v = this.navTo(tx, ty); mvx = v.x; mvy = v.y;
@@ -1479,10 +1479,10 @@ class Enemy {
   fire() {
     const it = this.held; if (!it) { this.burstLeft = 0; return; }
     const d = it.def; this.burstLeft--; this.burstT = d.burstGap || 0;
-    const sp = this.D.bullet * d.erel;
+    const sp = this.D.bullet * d.erel, volley = this.volley || ++VOLLEY_ID;   // one shot or burst shares an id
     for (let i = 0; i < d.pellets; i++) {
       const a = this.aim + (d.pellets > 1 ? lerp(-d.spread / 2, d.spread / 2, i / (d.pellets - 1)) + rand(-.04, .04) : rand(-1, 1) * (.06 * this.D.spread + d.spread));
-      const b = new Bullet(this.x, this.y, a, sp * (d.pellets > 1 ? rand(.9, 1.06) : 1), 'e', this, { life: (d.life || 4) * 1.25 });
+      const b = new Bullet(this.x, this.y, a, sp * (d.pellets > 1 ? rand(.9, 1.06) : 1), 'e', this, { life: (d.life || 4) * 1.25, volley });
       G.bullets.push(b); b.update(22 / sp);
     }
     const mx = this.x + Math.cos(this.aim) * 24, my = this.y + Math.sin(this.aim) * 24;
@@ -1499,7 +1499,7 @@ class Enemy {
     if (this.held) FX.slash(this.x + Math.cos(this.aim) * 6, this.y - 44 + Math.sin(this.aim) * 6, this.aim, reach, 'rgba(236,51,64,.8)', .16);
     if (d < reach + p.hitR + 4 && Math.abs(angDiff(this.aim, Math.atan2(p.y - this.y, p.x - this.x))) < arc + .2) {
       // a held tray or bottle takes the blow instead
-      if (p.held && !p.held.def.gun && !p.held.def.melee && Math.abs(angDiff(p.aim, Math.atan2(this.y - p.y, this.x - p.x))) < .7) { G.blockWithHeld(p, this.x, this.y); return; }
+      if (p.held && !p.held.def.gun && !p.held.def.melee && Math.abs(angDiff(p.aim, Math.atan2(this.y - p.y, this.x - p.x))) < (p.held.kind === 'tray' ? 1.15 : .7)) { G.blockWithHeld(p, this.x, this.y); return; }
       p.die(this.held ? 'Cut down by a ' + this.held.def.name.toLowerCase() : 'Punched', Math.cos(this.aim), Math.sin(this.aim));
     }
   }
@@ -1868,13 +1868,15 @@ const G = {
     this.level = L; this.buildFloor();
     this.enemies = []; this.items = []; this.bullets = []; this.pyramid = null; this.clearT = -1; this.killed = 0;
     if (mode !== 'morph') FX.clear();
-    this.player = new Player(L.sx, L.sy); this.player.visible = mode !== 'morph';
+    // the lines cooldown carries over between rooms and retries (it used to reset with every new room)
+    const keepMind = this.state === 'menu' ? [0, 0] : [this.player ? this.player.mind : 0, this.player2 ? this.player2.mind : 0];
+    this.player = new Player(L.sx, L.sy); this.player.visible = mode !== 'morph'; this.player.mind = keepMind[0];
     this.players = [this.player]; this.player2 = null;
     if (NET.active && NET.host) {
       // the friend starts right next to you
       let sx = L.sx + 40, sy = L.sy;
       for (const [ox, oy] of [[40, 0], [-40, 0], [0, 40], [0, -40], [34, 34], [-34, 34], [34, -34], [-34, -34]]) { const x = L.sx + ox, y = L.sy + oy; if (x > AX0 + 20 && x < AX1 - 20 && y > AY0 + 20 && y < AY1 - 20 && L.pass[L.cellOf(x, y)]) { sx = x; sy = y; break; } }
-      const p2 = new Player(sx, sy); p2.pal = PAL.player2; p2.remote = true; p2.inp = NET.rin; p2.visible = mode !== 'morph'; p2.net = null;
+      const p2 = new Player(sx, sy); p2.mind = keepMind[1]; p2.pal = PAL.player2; p2.remote = true; p2.inp = NET.rin; p2.visible = mode !== 'morph'; p2.net = null;
       this.player2 = p2; this.players.push(p2);
     }
     this.ls++; this.flows = []; this.flowCells = [];
@@ -2187,8 +2189,13 @@ const G = {
         FX.add({ type: 'puff', x: hx, y: hy, z: GUN_H, life: .5, size: 5, color: '#9aa1b8', g: 0 });
         SFX.wall(hx);
         return true;
-      case 'held': b.dead = true; this.blockWithHeld(best.ref, x1, y1); return true;
-      case 'player': b.dead = true; best.ref.die('Shot by a ' + (b.shooter && b.shooter.held ? b.shooter.held.def.name.toLowerCase() : 'stray bullet'), dx, dy); return true;
+      case 'held': b.dead = true; this.blockWithHeld(best.ref, x1, y1, b.volley); return true;
+      case 'player': {
+        // a tray is a real shield: anything coming at you from the side you face is stopped
+        const q = best.ref;
+        if (q.held && q.held.kind === 'tray' && Math.abs(angDiff(q.aim, Math.atan2(-b.vy, -b.vx))) < 1.15) { b.dead = true; this.blockWithHeld(q, x1, y1, b.volley); return true; }
+      }
+        b.dead = true; best.ref.die('Shot by a ' + (b.shooter && b.shooter.held ? b.shooter.held.def.name.toLowerCase() : 'stray bullet'), dx, dy); return true;
       case 'enemy': {
         const e = best.ref; e.kill(dx, dy, b.owner === 'p' ? 'shot' : 'friendly');
         if (b.owner === 'e') FX.text('FRIENDLY FIRE', e.x, e.y - 86, { size: 14, life: .9 });
@@ -2207,13 +2214,15 @@ const G = {
     return false;
   },
   /* what I hold takes the hit */
-  blockWithHeld(p, sx, sy) {
+  blockWithHeld(p, sx, sy, volley) {
     const it = p.held; if (!it) return;
+    const sameShot = volley && it.lastVolley === volley;   // a shotgun blast only costs one hit
+    if (volley) it.lastVolley = volley;
     const h = p.handPos();
     FX.sparks(h.x, h.y, GUN_H, { n: 9, color: '#ffffff', size: 2.4, angle: Math.atan2(sy - h.y, sx - h.x), spread: 1.1 });
     SFX.block(h.x); FX.addShake(.25); this.pulse(.08);
-    FX.text('BLOCKED', h.x, h.y - 80, { size: 16, life: .8 });
-    if (it.def.gun || it.def.melee) return;
+    if (!sameShot) FX.text('BLOCKED', h.x, h.y - 80, { size: 16, life: .8 });
+    if (it.def.gun || it.def.melee || sameShot) return;
     it.hp--;
     if (it.hp <= 0) {
       p.held = null;
