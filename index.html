@@ -1226,15 +1226,12 @@ class Player {
     if (this.pulling) this.updatePull(rdt);
     // the lines: hold left click on an enemy with empty hands
     this.mind = Math.max(0, this.mind - gdt * (this.ups.has('quicklines') ? 1.6 : 1));            // cooldown runs on world time
-    // JAM upgrade: hold G on an armed enemy
+    // JAM upgrade: G on an armed enemy jams him instantly (holding G works too: it fires the moment one is under the cursor)
     this.jamCd = Math.max(0, (this.jamCd || 0) - gdt);
-    if (this.ups.has('jam') && canAct && I.isDown('KeyG') && this.jamCd <= 0) {
-      const t = this.findJamTarget();
-      if (t && t === this.jamTarget) this.jamCharge += rdt; else { this.jamTarget = t; this.jamCharge = 0; if (t) SFX.mindStart(); }
-      if (this.jamTarget && this.jamCharge >= JAM.CHARGE) this.applyJam(this.jamTarget);
-    } else { this.jamTarget = null; this.jamCharge = 0; }
+    this.jamTarget = null; this.jamCharge = 0;
+    if (this.ups.has('jam') && canAct && I.isDown('KeyG') && this.jamCd <= 0) { const t = this.findJamTarget(); if (t) this.applyJam(t); }
     if (canAct && !this.held && I.isDown('Mouse0') && this.mind <= 0) {
-      const t = this.findMindTarget();
+      const t = this.findMindTarget(rdt);
       if (t && t === this.chargeTarget) this.charge += rdt;
       else { this.chargeTarget = t; this.charge = 0; if (t) SFX.mindStart(); }
       const isItem = this.chargeTarget instanceof Item;
@@ -1245,12 +1242,19 @@ class Player {
     if (I.hit('Mouse2', 'KeyQ')) this.throwHeld();
     if (I.hit('KeyE')) this.grabOrSwap();
   }
-  findMindTarget() {
-    const m = (this.inp || Input).mouse; let best = null, bd = 38;
+  findMindTarget(dt = 0) {
+    const m = (this.inp || Input).mouse; let best = null, bd = 44;
+    // once the lines are on someone they stay locked on: he can walk around and you only need the cursor roughly on him,
+    // and ducking behind cover for a blink doesn't break them
+    const ct = this.chargeTarget;
+    if (ct && !(ct instanceof Item) && ct.alive && dist(m.x, m.y, ct.x, ct.y - 40) < 130) {
+      if (G.level.los(this.x, this.y, ct.x, ct.y)) { this.lineGrace = .4; return ct; }
+      if ((this.lineGrace = (this.lineGrace || 0) - dt) > 0) return ct;
+    }
     for (const e of G.enemies) {
       if (!e.alive || e.spawnT > 0) continue;
       const d = dist(m.x, m.y, e.x, e.y - 40);
-      if (d < bd && G.level.los(this.x, this.y, e.x, e.y)) { bd = d; best = e; }
+      if (d < bd) { bd = d; best = e; }   // works through walls
     }
     if (best || this.pulling) return best;
     // no enemy under the cursor: a weapon or object lying somewhere can be pulled instead
@@ -1263,11 +1267,11 @@ class Player {
     return best;
   }
   findJamTarget() {
-    const m = (this.inp || Input).mouse; let best = null, bd = 40;
+    const m = (this.inp || Input).mouse; let best = null, bd = 50;
     for (const e of G.enemies) {
-      if (!e.alive || e.spawnT > 0 || !e.held || e.held.jammed) continue;
+      if (!e.alive || !e.held || e.held.jammed) continue;     // even one still materialising
       const d = dist(m.x, m.y, e.x, e.y - 40);
-      if (d < bd && G.level.los(this.x, this.y, e.x, e.y)) { bd = d; best = e; }
+      if (d < bd) { bd = d; best = e; }   // works through walls
     }
     return best;
   }
@@ -1935,9 +1939,9 @@ const UPG = {
   quicklines: { name: 'QUICK LINES', desc: 'Your lines ability recharges 60% faster.' },
   mindthrow: { name: 'MIND THROW', desc: 'Keep holding throw (right click or Q) after throwing to steer the object toward your cursor, like around a corner. Same distance as a normal throw, up to 3 seconds in the air.' },
   strongarm: { name: 'STRONG ARM', desc: 'You throw things much further and a bit faster.' },
-  jam: { name: 'JAM', desc: 'Hold G on an armed enemy for 1 second: his gun jams, or his bat or katana breaks, and he is stunned for 3 seconds of game time. Recharges in 10 seconds.' }
+  jam: { name: 'JAM', desc: 'Press G on an armed enemy: his gun jams, or his bat or katana breaks, and he is stunned for 3 seconds of game time. Recharges in 10 seconds.' }
 };
-const JAM = { CHARGE: 1, COOLDOWN: 10, STUN: 3 };
+const JAM = { CHARGE: 0, COOLDOWN: 10, STUN: 3 };
 const NO_UPS = new Set();
 
 /* simple ink icons for the cards */
