@@ -53,6 +53,15 @@
   .ghlink{position:absolute;bottom:22px;right:26px;color:#1c1e33;font-weight:600;font-size:16px;text-decoration:none;background:#fff;border:3px solid #1c1e33;border-radius:12px;padding:5px 12px;box-shadow:0 3px 0 #1c1e33;user-select:text;-webkit-user-select:text;}
   .ghlink:hover{background:#ff3b3b;color:#fff;}
   .ghl2{color:#ffd84a;font-weight:700;user-select:text;-webkit-user-select:text;}
+  #upCards{display:flex;gap:22px;margin:22px 0 8px;}
+  .ucard{font-family:'Fredoka',system-ui,sans-serif;width:250px;min-height:290px;background:#fff;color:#1c1e33;border:4px solid #1c1e33;border-radius:20px;box-shadow:0 7px 0 #1c1e33;padding:0 0 16px;cursor:pointer;display:flex;flex-direction:column;align-items:center;overflow:hidden;transition:transform .12s;}
+  .ucard:hover:not(:disabled){transform:translateY(-6px);}
+  .ucard .uname{width:100%;background:#ec3340;color:#fff;font-weight:700;font-size:22px;letter-spacing:.06em;padding:12px 8px;border-bottom:4px solid #1c1e33;-webkit-text-stroke:5px #1c1e33;paint-order:stroke fill;}
+  .ucard .uicon{margin:16px 0 8px;}
+  .ucard .udesc{font-size:16px;font-weight:500;line-height:1.3;padding:0 16px;color:#2a2e52;}
+  .ucard.dim{opacity:.35;}
+  .ucard.picked{transform:translateY(-6px);box-shadow:0 7px 0 #1c1e33,0 0 0 6px #ffd84a;}
+  .ucard:disabled{cursor:default;}
   .hintkey{font-size:16px;font-weight:600;color:#1c1e33;margin-top:10px;}
 </style>
 </head>
@@ -87,11 +96,27 @@
         <div class="k"><span>E</span></div><div>Pick up / swap</div>
         <div class="k"><span>HOLD LEFT CLICK</span></div><div>Empty hands, cursor on an enemy: 3 s of lines break him (11 s cooldown). On a weapon or object: it flies to your hand</div>
         <div class="k"><span>R</span></div><div>Restart the level</div>
+        <div class="k"><span>G</span></div><div>Jam (only with the Jam upgrade)</div>
         <div class="k"><span>ESC</span><span>M</span></div><div>Pause &nbsp;·&nbsp; mute</div>
       </div>
       <div class="note">Kill every <span class="r">red</span> enemy, then smash the black pyramid. One hit kills you — and them.<br>Black things can be picked up. Guns run dry fast: throw them, or take one from a dead enemy.<br>Bottles, mugs and trays kill when thrown, and block a bullet while you hold them.<br><b style="color:#ffd84a">Yellow</b> props are tall and stop bullets. White ones are low — bullets fly right over them.</div>
       <div style="margin-top:14px"><button class="mbtn" data-back>Back</button></div>
     </div>
+  </div>
+
+  <div id="setup" class="screen dim">
+    <div class="panel" style="text-align:center;min-width:520px">
+      <h2 style="font-size:34px;letter-spacing:.12em">NEW GAME</h2>
+      <div style="margin-top:14px"><button class="mbtn" id="btnUpgToggle">Upgrades: Off<span class="sub">red pyramids let you pick an upgrade</span></button></div>
+      <div class="note" id="upgNote">With upgrades on, every 5th level (and sometimes others) has a <span class="r">red pyramid</span>. Break it to pick 1 of 3 upgrades.</div>
+      <div class="row" style="justify-content:center;margin-top:14px"><button class="mbtn" id="btnSetupStart" style="min-width:200px">Start</button><button class="mbtn" id="btnSetupBack" style="min-width:200px">Back</button></div>
+    </div>
+  </div>
+
+  <div id="upgrade" class="screen dim">
+    <h2 class="ink" style="font-size:54px;letter-spacing:.1em">PICK AN UPGRADE</h2>
+    <div id="upCards"></div>
+    <div class="dcause" id="upWait"></div>
   </div>
 
   <div id="mp" class="screen dim">
@@ -103,7 +128,7 @@
         <div class="note" style="margin-top:12px">Send your friend this code</div>
         <div class="code" id="mpCode">-----</div>
         <div class="note" id="mpHostStatus">Starting…</div>
-        <div class="row" style="justify-content:center"><button class="mbtn" id="btnMpStart" disabled>Start (Level 1)</button></div>
+        <div class="row" style="justify-content:center"><button class="mbtn" id="btnMpUpg">Upgrades: Off</button><button class="mbtn" id="btnMpStart" disabled>Start (Level 1)</button></div>
       </div>
       <div id="mpJoin" hidden>
         <div class="note" style="margin-top:12px">Type your friend's code</div>
@@ -733,7 +758,7 @@ function drawPyramid(c, py, t) {
   c.lineJoin = 'round';
   for (const fc of faces) {
     const l = .5 + .5 * Math.sin(fc.ang + .8);
-    const col = l > .66 ? '#4a5078' : (l > .33 ? '#2e3252' : '#1f2238');
+    const col = py.red ? (l > .66 ? '#ff6b5e' : (l > .33 ? '#ec3340' : '#b81f2e')) : (l > .66 ? '#4a5078' : (l > .33 ? '#2e3252' : '#1f2238'));
     c.beginPath(); c.moveTo(apex[0], apex[1]); c.lineTo(fc.p1[0], fc.p1[1]); c.lineTo(fc.p2[0], fc.p2[1]); c.closePath();
     c.fillStyle = py.hitT > 0 ? '#ffffff' : col; c.fill(); c.strokeStyle = INKC; c.lineWidth = 2.6; c.stroke();
   }
@@ -997,6 +1022,7 @@ function moveCircle(e, dx, dy) {
   e.x = clamp(e.x, AX0 + e.r, AX1 - e.r); e.y = clamp(e.y, AY0 + e.r, AY1 - e.r);
 }
 
+const MIND_THROW = { TIME: 3, RANGE: 470 };   // no further than a normal throw, at most 3 s in the air
 /* =========================================================
    ITEMS
    ========================================================= */
@@ -1014,11 +1040,22 @@ class Item {
     if (this.pop > 0) this.pop = Math.max(0, this.pop - dt * 3);
     if (this.state !== 'flying') return;
     const L = G.level;
+    // MIND THROW: while the thrower keeps holding throw, the item turns toward the cursor and stays in the air
+    if (this.steer) {
+      const p = this.steer, I = p.inp || Input;
+      if (!p.alive || !this.thrower || this.steerT <= 0 || this.steerDist >= MIND_THROW.RANGE || !I.isDown('Mouse2', 'KeyQ')) this.steer = null;
+      else {
+        this.steerT -= dt; this.steerDist += Math.hypot(this.vx, this.vy) * dt;
+        const m = I.mouse, want = Math.atan2(m.y + this.z + 3 - this.y, m.x - this.x), cur = Math.atan2(this.vy, this.vx), sp = Math.hypot(this.vx, this.vy);
+        const na = cur + clamp(angDiff(cur, want), -8 * dt, 8 * dt);
+        this.vx = Math.cos(na) * sp; this.vy = Math.sin(na) * sp; this.vz = (32 - this.z) * 4;
+      }
+    }
     const steps = Math.max(1, Math.ceil(Math.hypot(this.vx, this.vy) * dt / 8));
     const h = dt / steps;
     for (let s = 0; s < steps && this.state === 'flying'; s++) {
       const ox = this.x, oy = this.y, oz = this.z;
-      this.x += this.vx * h; this.y += this.vy * h; this.vz -= 700 * h; this.z += this.vz * h; this.rot += this.vr * h;
+      this.x += this.vx * h; this.y += this.vy * h; if (!this.steer) this.vz -= 700 * h; this.z += this.vz * h; this.rot += this.vr * h;
       // walls and props
       for (const b of L.blocks) {
         if (b.s <= .5) continue;
@@ -1093,7 +1130,7 @@ function FX_label(c, x, y, s) {
 class Bullet {
   constructor(x, y, a, speed, owner, shooter, o = {}) {
     this.x = x; this.y = y; this.ox = x; this.oy = y; this.vx = Math.cos(a) * speed; this.vy = Math.sin(a) * speed;
-    this.owner = owner; this.shooter = shooter; this.life = o.life || 4; this.pierce = o.pierce || 0; this.dead = false; this.age = 0; this.volley = o.volley || 0;
+    this.owner = owner; this.shooter = shooter; this.life = o.life || 4; this.pierce = o.pierce || 0; this.dead = false; this.age = 0; this.volley = o.volley || 0; this.bounces = o.bounces || 0;
   }
   update(dt) {
     if (this.dead) return;
@@ -1135,6 +1172,7 @@ class Player {
     this.burstLeft = 0; this.burstT = 0; this.stepT = 0; this.grabTarget = null; this.mind = 0; this.charge = 0; this.chargeTarget = null; this.armsUp = false; this.visible = true; this.t = 0;
   }
   center() { return { x: this.x, y: this.y }; }
+  get ups() { return (G.runUps && G.runUps[this.slot || 0]) || NO_UPS; }
   handPos() { return { x: this.x + Math.cos(this.aim) * 16, y: this.y + Math.sin(this.aim) * 16 }; }
   update(rdt, gdt, canAct) {
     this.t += rdt;
@@ -1178,7 +1216,14 @@ class Player {
     // an item the lines are pulling glides to my hand (real time, so it never hangs)
     if (this.pulling) this.updatePull(rdt);
     // the lines: hold left click on an enemy with empty hands
-    this.mind = Math.max(0, this.mind - gdt);            // cooldown runs on world time
+    this.mind = Math.max(0, this.mind - gdt * (this.ups.has('quicklines') ? 1.6 : 1));            // cooldown runs on world time
+    // JAM upgrade: hold G on an armed enemy
+    this.jamCd = Math.max(0, (this.jamCd || 0) - gdt);
+    if (this.ups.has('jam') && canAct && I.isDown('KeyG') && this.jamCd <= 0) {
+      const t = this.findJamTarget();
+      if (t && t === this.jamTarget) this.jamCharge += rdt; else { this.jamTarget = t; this.jamCharge = 0; if (t) SFX.mindStart(); }
+      if (this.jamTarget && this.jamCharge >= JAM.CHARGE) this.applyJam(this.jamTarget);
+    } else { this.jamTarget = null; this.jamCharge = 0; }
     if (canAct && !this.held && I.isDown('Mouse0') && this.mind <= 0) {
       const t = this.findMindTarget();
       if (t && t === this.chargeTarget) this.charge += rdt;
@@ -1207,6 +1252,26 @@ class Player {
       if (d < bd && dist(this.x, this.y, it.x, it.y) > PC.REACH && G.level.los(this.x, this.y, it.x, it.y)) { bd = d; best = it; }
     }
     return best;
+  }
+  findJamTarget() {
+    const m = (this.inp || Input).mouse; let best = null, bd = 40;
+    for (const e of G.enemies) {
+      if (!e.alive || e.spawnT > 0 || !e.held || e.held.jammed) continue;
+      const d = dist(m.x, m.y, e.x, e.y - 40);
+      if (d < bd && G.level.los(this.x, this.y, e.x, e.y)) { bd = d; best = e; }
+    }
+    return best;
+  }
+  applyJam(e) {
+    const it = e.held;
+    if (it.def.gun) { it.jammed = true; SFX.dry(); FX.text('JAMMED', e.x, e.y - 90, { size: 16, life: .9 }); FX.sparks(e.x + Math.cos(e.aim) * 20, e.y + Math.sin(e.aim) * 20, GUN_H, { n: 6, color: INKC, smin: 60, smax: 160 }); }
+    else {
+      it.dead = true; it.state = 'dead'; e.held = null;
+      FX.shards(e.x + Math.cos(e.aim) * 18, e.y + Math.sin(e.aim) * 18, GUN_H, { n: 16, color: [IT.body, IT.mid, IT.light], smin: 40, smax: 200, szmin: 2, szmax: 4.5, lmin: 1.5, lmax: 3 });
+      SFX.glass(e.x); FX.text('BROKEN', e.x, e.y - 90, { size: 16, life: .9 });
+    }
+    e.stun = JAM.STUN; e.vx = 0; e.vy = 0; e.flash = 1; e.windup = 0; e.burstLeft = 0;
+    this.jamCd = JAM.COOLDOWN; this.jamTarget = null; this.jamCharge = 0;
   }
   /* like a telekinetic grab: the item lifts a little, then glides into my hand */
   mindPull(it) {
@@ -1249,6 +1314,13 @@ class Player {
   }
   pickUp(it) {
     it.state = 'held'; it.owner = this; it.thrower = null; it.vx = it.vy = it.vz = 0;
+    // REFILL: a gun I never held before gets up to 2 bullets back (drawn blue)
+    it.touched = it.touched || [];
+    if (it.isGun && this.ups.has('refill') && !it.touched.includes(this.slot || 0)) {
+      const add = Math.min(2, it.def.ammo - it.ammo);
+      if (add > 0) { it.ammo += add; it.blue = (it.blue || 0) + add; FX.text('+' + add, this.x, this.y - 92, { size: 16, life: .8, color: '#9cc3ff' }); }
+    }
+    if (!it.touched.includes(this.slot || 0)) it.touched.push(this.slot || 0);
     this.held = it; this.cd = Math.min(this.cd, .12);
     SFX.grab(); G.pulse(.1);
     FX.ring(it.x, it.y, { r0: 4, r1: 22, color: '#ffffff', w: 3, life: .25 });
@@ -1283,11 +1355,11 @@ class Player {
   }
   fireOnce() {
     const it = this.held; if (!it || !it.def.gun || it.ammo <= 0) { this.burstLeft = 0; return; }
-    const d = it.def; it.ammo--; this.burstLeft--; this.burstT = d.burstGap || 0;
-    const sx = this.x, sy = this.y;
+    const d = it.def; it.ammo--; it.blue = Math.min(it.blue || 0, it.ammo); this.burstLeft--; this.burstT = d.burstGap || 0;
+    const sx = this.x, sy = this.y, spMul = this.ups.has('fastbullet') ? 1.15 : 1, bounces = this.ups.has('ricochet') ? 1 : 0;
     for (let i = 0; i < d.pellets; i++) {
       const a = this.aim + (d.pellets > 1 ? lerp(-d.spread / 2, d.spread / 2, i / (d.pellets - 1)) + rand(-.03, .03) : rand(-d.spread, d.spread));
-      const b = new Bullet(sx, sy, a, d.speed * (d.pellets > 1 ? rand(.9, 1.08) : 1), 'p', this, { life: d.life || 3, pierce: d.pierce || 0 });
+      const b = new Bullet(sx, sy, a, d.speed * spMul * (d.pellets > 1 ? rand(.9, 1.08) : 1), 'p', this, { life: (d.life || 3) * (bounces ? 1.4 : 1), pierce: d.pierce || 0, bounces });
       G.bullets.push(b); b.update(24 / b.speed());
     }
     const mx = this.x + Math.cos(this.aim) * 26, my = this.y + Math.sin(this.aim) * 26;
@@ -1338,8 +1410,9 @@ class Player {
     this.held = null; this.throwT = 1; SFX.throwIt(); G.pulse(.15);
     it.state = 'flying'; it.owner = null; it.thrower = this;
     it.x = this.x + Math.cos(this.aim) * 14; it.y = this.y + Math.sin(this.aim) * 14; it.z = 32;
-    const sp = it.kind === 'tray' ? 820 : 900;
-    it.vx = Math.cos(this.aim) * sp; it.vy = Math.sin(this.aim) * sp; it.vz = 95; it.vr = (it.kind === 'tray' ? 26 : 17) * (Math.cos(this.aim) >= 0 ? 1 : -1);
+    const strong = this.ups.has('strongarm'), sp = (it.kind === 'tray' ? 820 : 900) * (strong ? 1.15 : 1);
+    it.vx = Math.cos(this.aim) * sp; it.vy = Math.sin(this.aim) * sp; it.vz = strong ? 150 : 95;
+    if (this.ups.has('mindthrow')) { it.steer = this; it.steerT = MIND_THROW.TIME; it.steerDist = 0; } it.vr = (it.kind === 'tray' ? 26 : 17) * (Math.cos(this.aim) >= 0 ? 1 : -1);
     if (!G.level.clearPath(this.x, this.y, it.x, it.y, 2)) { it.x = this.x; it.y = this.y; }
   }
   /* a bullet or blade got me */
@@ -1385,6 +1458,7 @@ class Enemy {
     this.kick = Math.max(0, this.kick - dt * 6); this.swing = Math.max(0, this.swing - dt * 4.5); this.punchT = Math.max(0, this.punchT - dt * 5); this.flash = Math.max(0, this.flash - dt * 5);
     if (this.spawnT > 0) { this.spawnT -= dt; this.moveAmt = 0; return; }
     if (this.stun > 0) { this.stun -= dt; moveCircle(this, this.vx * dt, this.vy * dt); this.vx *= Math.max(0, 1 - 6 * dt); this.vy *= Math.max(0, 1 - 6 * dt); this.moveAmt = 0; this.windup = 0; return; }
+    if (this.held && this.held.jammed) { const it = this.held; this.dropWeapon(rand(-1, 1), rand(-1, 1)); it.ammo = 0; it.blue = 0; this.cd = .6; }
     const p = this.target = G.targetFor(this), L = G.level;
     let tx = p && p.alive ? p.x : this.x, ty = p && p.alive ? p.y : this.y;
     const d = dist(this.x, this.y, tx, ty), los = p && p.alive && L.los(this.x, this.y, tx, ty);
@@ -1507,7 +1581,7 @@ class Enemy {
     const it = this.held; if (!it) return;
     this.held = null; it.owner = null; it.state = 'flying'; it.thrower = null;
     it.x = this.x; it.y = this.y; it.z = 30; it.vx = dx * 110 + rand(-50, 50); it.vy = dy * 110 + rand(-50, 50); it.vz = 260; it.vr = rand(-12, 12); it.noGrab = .25;
-    if (it.isGun) it.ammo = Math.max(1, Math.round(it.def.ammo * rand(.5, 1)));
+    if (it.isGun) { it.ammo = Math.max(1, Math.round(it.def.ammo * rand(.5, 1))); it.blue = 0; }
     this.burstLeft = 0;
   }
   /* punches and thrown guns knock the weapon out first */
@@ -1678,11 +1752,13 @@ const NET = {
     if (this.host) {
       if (d.t === 'in') {
         const R = this.rin; R.mouse.x = d.mx; R.mouse.y = d.my;
-        R.down = { KeyW: d.d & 1, KeyA: d.d & 2, KeyS: d.d & 4, KeyD: d.d & 8, Mouse0: d.d & 16 };
+        R.down = { KeyW: d.d & 1, KeyA: d.d & 2, KeyS: d.d & 4, KeyD: d.d & 8, Mouse0: d.d & 16, Mouse2: d.d & 32, KeyQ: d.d & 32, KeyG: d.d & 64 };
         for (const k of d.pr || []) R.pressed[k] = true;
         const p2 = G.player2;
-        if (p2 && d.ls === G.ls) p2.net = { x: d.x, y: d.y, vx: d.vx, vy: d.vy, mv: d.mv };
+        if (p2 && d.ls === G.ls && d.tp === G.tp) p2.net = { x: d.x, y: d.y, vx: d.vx, vy: d.vy, mv: d.mv };
       } else if (d.t === 'retry') { if (G.state === 'dead') G.restartLevel(); }
+      else if (d.t === 'pick') G.pickUpgrade(1, d.k);
+      else if (d.t === 'spawn') G.chooseSpawn(1, d.i);
     } else if (this.guest) {
       if (d.t === 's') applySnapshot(d);
       else if (d.t === 'menu') { this.close(); G.toMenu(); showMpMessage('The host went back to the menu.'); }
@@ -1698,8 +1774,8 @@ const NET = {
       const p = G.player, I = Input, pr = [];
       for (const k of ['Mouse0', 'Mouse2', 'KeyQ', 'KeyE']) if (I.pressed[k]) pr.push(k);
       const canMove = G.state === 'play' && p.alive && !G.paused;
-      const bits = canMove ? ((I.isDown('KeyW', 'ArrowUp') ? 1 : 0) | (I.isDown('KeyA', 'ArrowLeft') ? 2 : 0) | (I.isDown('KeyS', 'ArrowDown') ? 4 : 0) | (I.isDown('KeyD', 'ArrowRight') ? 8 : 0) | (I.isDown('Mouse0') ? 16 : 0)) : 0;
-      this.send({ t: 'in', ls: G.ls, x: this.r1(p.x), y: this.r1(p.y), vx: this.r1(p.vx), vy: this.r1(p.vy), mv: this.r2(p.moveAmt), mx: Math.round(I.mouse.x), my: Math.round(I.mouse.y), d: bits, pr: canMove ? pr : [] });
+      const bits = canMove ? ((I.isDown('KeyW', 'ArrowUp') ? 1 : 0) | (I.isDown('KeyA', 'ArrowLeft') ? 2 : 0) | (I.isDown('KeyS', 'ArrowDown') ? 4 : 0) | (I.isDown('KeyD', 'ArrowRight') ? 8 : 0) | (I.isDown('Mouse0') ? 16 : 0) | (I.isDown('Mouse2', 'KeyQ') ? 32 : 0) | (I.isDown('KeyG') ? 64 : 0)) : 0;
+      this.send({ t: 'in', ls: G.ls, tp: G.tp, x: this.r1(p.x), y: this.r1(p.y), vx: this.r1(p.vx), vy: this.r1(p.vy), mv: this.r2(p.moveAmt), mx: Math.round(I.mouse.x), my: Math.round(I.mouse.y), d: bits, pr: canMove ? pr : [] });
     }
   },
   rec(kind, m, a) { if (this.host && this.active && G.state !== 'menu') { try { this.ev.push([kind, m, JSON.parse(JSON.stringify(a))]); } catch (e) { } } }
@@ -1725,17 +1801,19 @@ function makeRemoteInput() {
 })();
 
 /* ---------- host → guest: the world as it is now ---------- */
-function snapHeld(it) { return it ? { k: it.kind, a: it.ammo, h: it.hp } : null; }
+function snapHeld(it) { return it ? { k: it.kind, a: it.ammo, h: it.hp, b: it.blue || 0 } : null; }
 function buildSnapshot() {
   const r1 = NET.r1, r2 = NET.r2, S = G.seq;
   return {
-    t: 's', ls: G.ls, n: G.levelN, s: G.state, ts: r2(G.ts), rem: G.remaining || 0, hp: G.hearts,
+    t: 's', ls: G.ls, tp: G.tp, n: G.levelN, s: G.state, ts: r2(G.ts), rem: G.remaining || 0, hp: G.hearts, uon: G.upgradesOn ? 1 : 0, ups: G.runUps.map(s => [...s]),
+    up: G.state === 'upgrade' && G.offers ? { o: G.offers[1], d: G.picked[1] ? 1 : 0 } : null,
+    sp: G.state === 'spawnpick' && G.spawnPick ? { s: G.spawnPick.spots.map(q => [Math.round(q[0]), Math.round(q[1])]), p: G.spawnPick.pickers, c: G.spawnPick.chosen } : null,
     seq: S ? { t: r2(S.t), mode: S.mode, dur: S.dur, w: S.word ?? -1 } : null,
-    p: G.players.map(q => ({ x: r1(q.x), y: r1(q.y), aim: r2(q.aim), f: q.face, w: r2(q.walk), mv: r2(q.moveAmt), k: r2(q.kick), sw: r2(q.swing), pu: r2(q.punchT), th: r2(q.throwT), al: q.alive ? 1 : 0, v: q.visible ? 1 : 0, h: snapHeld(q.held), mind: r1(q.mind), ct: q.chargeTarget ? (q.chargeTarget instanceof Item ? 'i' : 'e') + q.chargeTarget.id : 0, pl: q.pulling ? q.pulling.it.id : 0, c: q.cause || '' })),
+    p: G.players.map(q => ({ x: r1(q.x), y: r1(q.y), aim: r2(q.aim), f: q.face, w: r2(q.walk), mv: r2(q.moveAmt), k: r2(q.kick), sw: r2(q.swing), pu: r2(q.punchT), th: r2(q.throwT), al: q.alive ? 1 : 0, v: q.visible ? 1 : 0, h: snapHeld(q.held), mind: r1(q.mind), ct: q.chargeTarget ? (q.chargeTarget instanceof Item ? 'i' : 'e') + q.chargeTarget.id : 0, pl: q.pulling ? q.pulling.it.id : 0, jc: r1(q.jamCd || 0), jt: q.jamTarget ? q.jamTarget.id : 0, c: q.cause || '' })),
     e: G.enemies.filter(e => e.alive).map(e => ({ id: e.id, x: r1(e.x), y: r1(e.y), aim: r2(e.aim), f: e.face, w: r2(e.walk), mv: r2(e.moveAmt), k: r2(e.kick), sw: r2(e.swing), pu: r2(e.punchT), wu: r2(e.windup), st: r2(e.stun), sp: r2(e.spawnT), sm: r2(e.spawnMax), aT: r2(e.aimT), re: r2(e.react), cd: r2(e.cd), bl: e.burstLeft, h: e.held ? e.held.kind : 0 })),
     b: G.bullets.filter(b => !b.dead).map(b => ({ x: r1(b.x), y: r1(b.y), ox: r1(b.ox), oy: r1(b.oy), vx: r1(b.vx), vy: r1(b.vy), o: b.owner })),
-    it: G.items.filter(i => i.state !== 'held' && !i.dead).map(i => ({ id: i.id, k: i.kind, x: r1(i.x), y: r1(i.y), z: r1(i.z), rz: r1(i.restZ), r: r2(i.rot), s: i.state === 'flying' ? 'f' : (i.state === 'pulled' ? 'p' : 'g'), a: i.ammo, pop: r2(i.pop) })),
-    py: G.pyramid ? { x: r1(G.pyramid.x), y: r1(G.pyramid.y), age: r2(G.pyramid.age), al: G.pyramid.alive ? 1 : 0 } : null,
+    it: G.items.filter(i => i.state !== 'held' && !i.dead).map(i => ({ id: i.id, k: i.kind, x: r1(i.x), y: r1(i.y), z: r1(i.z), rz: r1(i.restZ), r: r2(i.rot), s: i.state === 'flying' ? 'f' : (i.state === 'pulled' ? 'p' : 'g'), a: i.ammo, pop: r2(i.pop), st: i.steer ? i.steer.slot + 1 : 0 })),
+    py: G.pyramid ? { x: r1(G.pyramid.x), y: r1(G.pyramid.y), age: r2(G.pyramid.age), al: G.pyramid.alive ? 1 : 0, red: G.pyramid.red ? 1 : 0 } : null,
     ev: NET.ev.slice()
   };
 }
@@ -1744,7 +1822,7 @@ function buildSnapshot() {
 const heldCache = {};
 function fakeHeld(h) {
   if (!h) return null;
-  const it = Object.create(Item.prototype); it.kind = h.k; it.def = WEP[h.k]; it.ammo = h.a; it.hp = h.h; it.state = 'held';
+  const it = Object.create(Item.prototype); it.kind = h.k; it.def = WEP[h.k]; it.ammo = h.a; it.hp = h.h; it.blue = h.b || 0; it.state = 'held';
   return it;
 }
 function viewPlayer(d) {
@@ -1756,18 +1834,22 @@ function viewPlayer(d) {
 function applyPlayerFields(q, d) {
   q.aim = d.aim; q.face = d.f; q.moveAmt = d.mv; q.kick = Math.max(q.kick || 0, d.k); q.swing = Math.max(q.swing || 0, d.sw); q.punchT = Math.max(q.punchT || 0, d.pu); q.throwT = Math.max(q.throwT || 0, d.th);
   q.alive = !!d.al; q.visible = !!d.v; q.mind = d.mind; q.cause = d.c;
-  if (!q.held || !d.h || q.held.kind !== d.h.k) q.held = fakeHeld(d.h); else { q.held.ammo = d.h.a; q.held.hp = d.h.h; }
-  q.ctId = d.ct; q.plId = d.pl;
+  if (!q.held || !d.h || q.held.kind !== d.h.k) q.held = fakeHeld(d.h); else { q.held.ammo = d.h.a; q.held.hp = d.h.h; q.held.blue = d.h.b || 0; }
+  q.ctId = d.ct; q.plId = d.pl; q.jamCd = d.jc; q.jtId = d.jt;
 }
 function applySnapshot(S) {
   const firstTime = G.ls !== S.ls;
   if (firstTime) guestLevel(S);
   const prevState = G.state, prevStateDead = G.state === 'dead';
   G.state = S.s; G.levelN = S.n; G.remaining = S.rem; G.netTs = S.ts; G.hearts = S.hp; G.netHearts = S.hp;
+  G.upgradesOn = !!S.uon; G.runUps = (S.ups || [[], []]).map(a => new Set(a));
+  if (S.s === 'upgrade' && S.up) { if (!S.up.d) showUpgradeCards(S.up.o, k => { NET.send({ t: 'pick', k }); $('upWait').textContent = 'Waiting…'; }, 'g' + S.ls); else if ($('upgrade').classList.contains('on')) $('upWait').textContent = 'Waiting for your friend to pick…'; }
+  else if (prevState === 'upgrade') hideUpgradeCards();
+  if (S.s === 'spawnpick' && S.sp) { const mine = G.spawnPick && G.spawnPick.chosen[1] >= 0 ? G.spawnPick.chosen[1] : -1; G.spawnPick = { spots: S.sp.s, pickers: S.sp.p, chosen: [S.sp.c[0], S.sp.c[1] >= 0 ? S.sp.c[1] : mine], mySlot: 1 }; } else G.spawnPick = null;
   if (S.s === 'dead' && prevStateDead !== true) { $('dCause').textContent = S.hp > 0 ? '' : ((S.p[1] && S.p[1].c) || ''); }
   if (S.seq) { if (!G.seq || G.seq.mode !== S.seq.mode || Math.abs(G.seq.t - S.seq.t) > .15) G.seq = { t: S.seq.t, mode: S.seq.mode, dur: S.seq.dur, word: S.seq.w }; else G.seq.word = S.seq.w; }
   else G.seq = null;
-  if (prevState === 'build' && S.s === 'play') { G.banner = { t: 0, a: 'LEVEL ' + S.n, b: THEME_NAME[G.level.theme] }; G.hint('Co-op: time moves whenever either of you moves.', 4); }
+  if ((prevState === 'build' || prevState === 'spawnpick') && S.s === 'play') { G.banner = { t: 0, a: 'LEVEL ' + S.n, b: THEME_NAME[G.level.theme] }; G.hint('Co-op: time moves whenever either of you moves.', 4); }
   // players: [host, me]
   const me = G.player, other = G.other;
   if (other) { applyPlayerFields(other, S.p[0]); other.tx = S.p[0].x; other.ty = S.p[0].y; other.walkT = S.p[0].w; }
@@ -1775,6 +1857,7 @@ function applySnapshot(S) {
     const wasAlive = me.alive;
     const d = S.p[1], aim = me.aim, face = me.face, mv = me.moveAmt;
     applyPlayerFields(me, d); me.aim = aim; me.face = face; me.moveAmt = mv;
+    if (S.tp !== G.tp || S.s === 'spawnpick' || S.s === 'build') { me.x = d.x; me.y = d.y; me.vx = me.vy = 0; G.tp = S.tp; }
     if (wasAlive && !me.alive) { if (other && other.alive) G.hint("You're down — your friend can still clear the room. You'll be back next level.", 99); }
   }
   // enemies
@@ -1796,16 +1879,16 @@ function applySnapshot(S) {
   for (const d of S.it) {
     let it = iById.get(d.id);
     if (!it || it.kind !== d.k) { it = Object.create(Item.prototype); Object.assign(it, { id: d.id, kind: d.k, def: WEP[d.k], x: d.x, y: d.y, z: d.z, vx: 0, vy: 0, vz: 0, vr: 0, dead: false, noGrab: 0, thrower: null, owner: null, hp: 1 }); }
-    it.tx = d.x; it.ty = d.y; it.z = d.z; it.restZ = d.rz; it.rot = d.r; it.state = d.s === 'f' ? 'flying' : (d.s === 'p' ? 'pulled' : 'ground'); if (d.s !== 'p') it.pulledBy = null; it.ammo = d.a; it.pop = d.pop;
+    it.tx = d.x; it.ty = d.y; it.z = d.z; it.restZ = d.rz; it.rot = d.r; it.state = d.s === 'f' ? 'flying' : (d.s === 'p' ? 'pulled' : 'ground'); if (d.s !== 'p') it.pulledBy = null; it.steer = d.st ? (d.st - 1 === 1 ? me : other) : null; it.ammo = d.a; it.pop = d.pop;
     if (d.s !== 'f') { it.x = d.x; it.y = d.y; }
     items.push(it);
   }
   G.items = items;
   const iMap = new Map(items.map(i => [i.id, i]));
   const findCt = id => !id ? null : (String(id)[0] === 'i' ? iMap.get(+String(id).slice(1)) : eById.get(+String(id).slice(1))) || null;
-  for (const q of [me, other]) if (q) { q.chargeTarget = findCt(q.ctId); for (const it of items) if (it.state === 'pulled' && it.id === q.plId) it.pulledBy = q; }
+  for (const q of [me, other]) if (q) { q.jamTarget = q.jtId ? eById.get(q.jtId) || null : null; q.chargeTarget = findCt(q.ctId); for (const it of items) if (it.state === 'pulled' && it.id === q.plId) it.pulledBy = q; }
   // the pyramid
-  if (S.py) { if (!G.pyramid) { G.pyramid = Object.create(Pyramid.prototype); Object.assign(G.pyramid, { r: 24, hitT: 0 }); } Object.assign(G.pyramid, { x: S.py.x, y: S.py.y, age: S.py.age, alive: !!S.py.al }); }
+  if (S.py) { if (!G.pyramid) { G.pyramid = Object.create(Pyramid.prototype); Object.assign(G.pyramid, { r: 24, hitT: 0 }); } Object.assign(G.pyramid, { x: S.py.x, y: S.py.y, age: S.py.age, alive: !!S.py.al, red: !!S.py.red }); }
   else G.pyramid = null;
   // effects and sounds
   for (const [k, m, a] of S.ev) { try { if (k === 'F') FX['_' + m](...a); else SFX['_' + m](...a); } catch (e) { } }
@@ -1819,16 +1902,121 @@ function guestLevel(S) {
   G.enemies = []; G.items = []; G.bullets = []; G.pyramid = null;
   if (mode !== 'morph') FX.clear(); else FX.parts = FX.parts.filter(q => q.type === 'cube');
   const me = new Player(S.p[1] ? S.p[1].x : L.sx, S.p[1] ? S.p[1].y : L.sy); me.noActions = true; me.pal = PAL.player2;
-  G.player = me; G.other = viewPlayer(S.p[0]); G.players = [G.other, me];
-  G.ls = S.ls; G.paused = false;
+  me.slot = 1; G.player = me; G.other = viewPlayer(S.p[0]); G.other.slot = 0; G.players = [G.other, me];
+  G.ls = S.ls; G.tp = S.tp; G.paused = false;
   hideScreens(); setCursor(false);
+}
+/* =========================================================
+   UPGRADES — optional. A red pyramid lets you pick 1 of 3.
+   ========================================================= */
+const BLUE = '#3b82f6';
+const UPG = {
+  ricochet: { name: 'RICOCHET', desc: 'Bullets from your guns bounce off a wall once. They break on the second wall they hit.' },
+  fastbullet: { name: 'FAST BULLETS', desc: 'Bullets from your guns fly 15% faster.' },
+  spawn: { name: 'PICK YOUR SPAWN', desc: 'Before every level starts, click one of the marked spots to start there.' },
+  refill: { name: 'REFILL', desc: 'The first time you pick up a gun, it gets up to 2 bullets back. Refilled bullets show in blue. A gun you already held does not refill.' },
+  heart: { name: 'SECOND WIND', desc: 'Your team gets 1 heart back every 3 levels, up to 5.', coop: true },
+  quicklines: { name: 'QUICK LINES', desc: 'Your lines ability recharges 60% faster.' },
+  mindthrow: { name: 'MIND THROW', desc: 'Keep holding throw (right click or Q) after throwing to steer the object toward your cursor, like around a corner. Same distance as a normal throw, up to 3 seconds in the air.' },
+  strongarm: { name: 'STRONG ARM', desc: 'You throw things much further and a bit faster.' },
+  jam: { name: 'JAM', desc: 'Hold G on an armed enemy for 1 second: his gun jams, or his bat or katana breaks, and he is stunned for 3 seconds of game time. Recharges in 10 seconds.' }
+};
+const JAM = { CHARGE: 1, COOLDOWN: 10, STUN: 3 };
+const NO_UPS = new Set();
+
+/* simple ink icons for the cards */
+const UPG_ICON = {
+  ricochet: '<path d="M8 50 L30 16 L46 42 L58 20" fill="none"/><path d="M50 18 L58 20 L58 28" fill="none"/><path d="M22 10 L38 10 M38 48 L54 48" stroke-width="5"/>',
+  fastbullet: '<rect x="24" y="24" width="32" height="16" rx="8" fill="#1c1e33"/><path d="M6 26 H18 M2 32 H18 M6 38 H18" fill="none"/>',
+  spawn: '<path d="M32 58 C20 42 14 34 14 24 A18 18 0 0 1 50 24 C50 34 44 42 32 58 Z" fill="#fff"/><circle cx="32" cy="24" r="6" fill="#1c1e33"/>',
+  refill: '<rect x="12" y="14" width="10" height="36" rx="4" fill="#1c1e33"/><rect x="27" y="14" width="10" height="36" rx="4" fill="#1c1e33"/><rect x="42" y="14" width="10" height="36" rx="4" fill="' + BLUE + '"/>',
+  heart: '<path d="M32 54 C10 38 8 26 14 18 C20 10 30 12 32 20 C34 12 44 10 50 18 C56 26 54 38 32 54 Z" fill="#ec3340"/>',
+  quicklines: '<path d="M6 26 L16 20 L26 28 L36 20 L46 28 L58 22" fill="none"/><path d="M6 42 L16 36 L26 44 L36 36 L46 44 L58 38" fill="none"/>',
+  mindthrow: '<path d="M10 52 C10 20 40 10 52 30" fill="none" stroke-dasharray="6 6"/><path d="M44 30 L52 30 L54 22" fill="none"/><circle cx="10" cy="52" r="5" fill="#1c1e33"/>',
+  strongarm: '<path d="M6 52 Q32 2 58 52" fill="none"/><circle cx="58" cy="52" r="5" fill="#1c1e33"/><path d="M6 58 H58" fill="none" stroke-width="3"/>',
+  jam: '<path d="M10 24 H50 V34 H28 L24 48 H14 L18 34 H10 Z" fill="#1c1e33"/><path d="M40 40 L58 58 M58 40 L40 58" stroke="#ec3340" fill="none"/>'
+};
+function upgIcon(k) { return '<svg viewBox="0 0 64 64" width="64" height="64" stroke="#1c1e33" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">' + (UPG_ICON[k] || '') + '</svg>'; }
+
+/* pick up to 3 upgrades the player doesn't have yet */
+function rollOffers(slot) {
+  const own = G.runUps[slot] || NO_UPS;
+  const pool = Object.keys(UPG).filter(k => !own.has(k) && (!UPG[k].coop || NET.active));
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  return pool.slice(0, 3);
+}
+
+/* ---------- the card screen ---------- */
+let cardsShownFor = null;
+function showUpgradeCards(offers, onPick, key) {
+  if (cardsShownFor === key) return;
+  cardsShownFor = key;
+  const box = $('upCards'); box.innerHTML = '';
+  $('upWait').textContent = '';
+  for (const k of offers) {
+    const b = document.createElement('button'); b.className = 'ucard';
+    b.innerHTML = '<div class="uname">' + UPG[k].name + '</div><div class="uicon">' + upgIcon(k) + '</div><div class="udesc">' + UPG[k].desc + '</div>';
+    b.addEventListener('mouseenter', () => SFX.uiHover());
+    b.addEventListener('click', () => {
+      SFX.uiClick();
+      box.querySelectorAll('.ucard').forEach(x => { x.disabled = true; if (x !== b) x.classList.add('dim'); });
+      b.classList.add('picked');
+      onPick(k);
+    });
+    box.appendChild(b);
+  }
+  showScreen('upgrade'); setCursor(true);
+}
+function hideUpgradeCards() { cardsShownFor = null; if ($('upgrade').classList.contains('on')) { hideScreens(); setCursor(false); } }
+
+/* ---------- picking a spawn spot ---------- */
+function spawnSpotsFor(L) {
+  const cands = [[AX0 + 70, AY0 + 70], [AX1 - 70, AY0 + 70], [AX0 + 70, AY1 - 60], [AX1 - 70, AY1 - 60], [(AX0 + AX1) / 2, (AY0 + AY1) / 2 + 10], [AX0 + 70, (AY0 + AY1) / 2], [AX1 - 70, (AY0 + AY1) / 2], [(AX0 + AX1) / 2, AY1 - 60], [(AX0 + AX1) / 2, AY0 + 70]];
+  const out = [[L.sx, L.sy]];
+  for (const [x, y] of cands) {
+    if (out.some(o => dist(o[0], o[1], x, y) < 60)) continue;
+    if (!L.pass[L.cellOf(x, y)]) continue;
+    let bad = false; for (const b of L.blocks) if (circleRect(x, y, 24, b)) { bad = true; break; }
+    if (bad) continue;
+    if (G.enemies.some(e => dist(e.x, e.y, x, y) < 300)) continue;
+    out.push([x, y]);
+  }
+  return out;
+}
+function nearestSpot(spots, mx, my) {
+  let bi = -1, bd = 40;
+  spots.forEach((s, i) => { const d = dist(mx, my + 20, s[0], s[1]); if (d < bd) { bd = d; bi = i; } });
+  return bi;
+}
+function drawSpawnPick(c, P) {
+  const m = Input.mouse, hov = nearestSpot(P.spots, m.x, m.y);
+  P.spots.forEach((s, i) => {
+    const [x, y] = s, mine = P.chosen[P.mySlot] === i, theirs = P.chosen[1 - P.mySlot] === i;
+    c.save();
+    c.fillStyle = mine ? 'rgba(28,30,51,.85)' : (i === hov ? 'rgba(255,255,255,.95)' : 'rgba(255,255,255,.6)');
+    c.strokeStyle = INKC; c.lineWidth = 3;
+    c.setLineDash(mine || i === hov ? [] : [7, 6]);
+    c.beginPath(); c.ellipse(x, y, 26, 12, 0, 0, TAU); c.fill(); c.stroke();
+    c.restore();
+    if (i === 0) FX_label(c, x, y + 24, 'DEFAULT');
+    if (theirs) FX_label(c, x, y - 22, 'FRIEND');
+  });
+  const need = P.pickers[P.mySlot] && P.chosen[P.mySlot] < 0;
+  inkText(c, need ? 'PICK WHERE TO START' : 'WAITING FOR YOUR FRIEND…', W / 2, 250, 40, 'center', 9);
+  if (need) inkText(c, 'click a marked spot', W / 2, 290, 18, 'center', 5);
+}
+/* the dashed mark around an enemy you are jamming */
+function drawJamMark(c, e) {
+  c.save(); c.translate(e.x, e.y - 40);
+  c.strokeStyle = 'rgba(28,30,51,.7)'; c.lineWidth = 2.5; c.setLineDash([5, 6]); c.lineDashOffset = -G.realT * 20;
+  c.beginPath(); c.arc(0, 0, 30, 0, TAU); c.stroke(); c.restore();
 }
 /* =========================================================
    GAME — time, levels, the pyramid, the room changing around
    you, HUD and menus.
    ========================================================= */
 const IDLE_TIME = .035;
-const SAVE_KEY = 'stillshot_level', BEST_KEY = 'stillshot_best', MP_SAVE_KEY = 'stillshot_mp_level';
+const SAVE_KEY = 'stillshot_level', BEST_KEY = 'stillshot_best', MP_SAVE_KEY = 'stillshot_mp_level', RUN_KEY = 'stillshot_run';
 function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id)); }
 function hideScreens() { document.querySelectorAll('.screen').forEach(s => s.classList.remove('on')); }
 function setCursor(v) { stage.classList.toggle('nocursor', !v); }
@@ -1846,7 +2034,7 @@ const MP_HEARTS = 5;
 const G = {
   state: 'menu', paused: false, levelN: 1, level: null, player: null, enemies: [], items: [], bullets: [], pyramid: null,
   ts: 0, realT: 0, pulseT: 0, flow: null, flowCell: -1, flowT: 0, toSpawn: [], spawnT: 0, clearT: -1,
-  seq: null, oldBlocks: [], deadT: 0, players: [], flows: [], flowCells: [], ls: 0, hearts: MP_HEARTS, other: null, player2: null, hintText: '', hintT: 0, tut: {}, banner: null, deaths: 0, floorCv: null,
+  seq: null, oldBlocks: [], deadT: 0, upgradesOn: false, runUps: [new Set(), new Set()], offers: null, picked: null, spawnPick: null, tp: 0, players: [], flows: [], flowCells: [], ls: 0, hearts: MP_HEARTS, other: null, player2: null, hintText: '', hintT: 0, tut: {}, banner: null, deaths: 0, floorCv: null,
 
   /* ---------- flow ---------- */
   toMenu() {
@@ -1856,8 +2044,17 @@ const G = {
     this.buildMenuScene();
     showScreen('menu'); setCursor(true); updateMenu();
   },
-  newGame() { this.levelN = 1; store.set(SAVE_KEY, 1); this.deaths = 0; this.tut = {}; this.beginLevel(1, 'rise'); },
-  continueGame() { const n = store.get(SAVE_KEY, 1); this.levelN = n; this.tut = { done: true }; this.beginLevel(n, 'rise'); },
+  newGame(upgrades) {
+    this.levelN = 1; store.set(SAVE_KEY, 1); this.deaths = 0; this.tut = {};
+    this.upgradesOn = !!upgrades; this.runUps = [new Set(), new Set()]; this.saveRun();
+    this.beginLevel(1, 'rise');
+  },
+  continueGame() {
+    const n = store.get(SAVE_KEY, 1), run = store.get(RUN_KEY, null); this.levelN = n; this.tut = { done: true };
+    this.upgradesOn = !!(run && run.on); this.runUps = [new Set(run && run.owned || []), new Set()];
+    this.beginLevel(n, 'rise');
+  },
+  saveRun() { if (!NET.active) store.set(RUN_KEY, { on: this.upgradesOn, owned: [...this.runUps[0]] }); },
   /* build the room for level n. mode: 'rise' (fresh), 'retry' (quick), 'morph' (after a pyramid) */
   beginLevel(n, mode) {
     hideScreens(); setCursor(false);
@@ -1870,13 +2067,14 @@ const G = {
     if (mode !== 'morph') FX.clear();
     // the lines cooldown carries over between rooms and retries (it used to reset with every new room)
     const keepMind = this.state === 'menu' ? [0, 0] : [this.player ? this.player.mind : 0, this.player2 ? this.player2.mind : 0];
-    this.player = new Player(L.sx, L.sy); this.player.visible = mode !== 'morph'; this.player.mind = keepMind[0];
+    const keepJam = this.state === 'menu' ? [0, 0] : [this.player ? this.player.jamCd || 0 : 0, this.player2 ? this.player2.jamCd || 0 : 0];
+    this.player = new Player(L.sx, L.sy); this.player.visible = mode !== 'morph'; this.player.mind = keepMind[0]; this.player.slot = 0; this.player.jamCd = keepJam[0];
     this.players = [this.player]; this.player2 = null;
     if (NET.active && NET.host) {
       // the friend starts right next to you
       let sx = L.sx + 40, sy = L.sy;
       for (const [ox, oy] of [[40, 0], [-40, 0], [0, 40], [0, -40], [34, 34], [-34, 34], [34, -34], [-34, -34]]) { const x = L.sx + ox, y = L.sy + oy; if (x > AX0 + 20 && x < AX1 - 20 && y > AY0 + 20 && y < AY1 - 20 && L.pass[L.cellOf(x, y)]) { sx = x; sy = y; break; } }
-      const p2 = new Player(sx, sy); p2.mind = keepMind[1]; p2.pal = PAL.player2; p2.remote = true; p2.inp = NET.rin; p2.visible = mode !== 'morph'; p2.net = null;
+      const p2 = new Player(sx, sy); p2.mind = keepMind[1]; p2.slot = 1; p2.jamCd = keepJam[1]; p2.pal = PAL.player2; p2.remote = true; p2.inp = NET.rin; p2.visible = mode !== 'morph'; p2.net = null;
       this.player2 = p2; this.players.push(p2);
     }
     this.ls++; this.flows = []; this.flowCells = [];
@@ -1910,10 +2108,10 @@ const G = {
   },
   restartLevel() {
     if (NET.guest) { NET.send({ t: 'retry' }); return; }
-    if (NET.active && this.hearts <= 0) { this.hearts = MP_HEARTS; this.beginLevel(1, 'rise'); return; }   // out of hearts: the run starts over
+    if (NET.active && this.hearts <= 0) { this.hearts = MP_HEARTS; this.runUps = [new Set(), new Set()]; this.beginLevel(1, 'rise'); return; }   // out of hearts: the run starts over
     this.deaths++; this.beginLevel(this.levelN, 'retry');
   },
-  startCoop(n) { this.tut = { done: true }; this.hearts = MP_HEARTS; this.beginLevel(n, 'rise'); },
+  startCoop(n, upgrades) { this.tut = { done: true }; this.hearts = MP_HEARTS; this.upgradesOn = !!upgrades; this.runUps = [new Set(), new Set()]; this.beginLevel(n, 'rise'); },
   /* who should this enemy go after? the nearest friend he can see, else the nearest */
   targetFor(e) {
     let best = null, bd = 1e9, seen = false;
@@ -1952,7 +2150,7 @@ const G = {
       if (NET.active && this.players.filter(q => q.alive).length > 1) target = Math.max(IDLE_TIME, target * MP_TIME);   // alone again: normal speed
     }
     if (this.state === 'dead') target = .22;
-    if (this.state === 'build' || this.state === 'clear') target = 0;
+    if (this.state === 'build' || this.state === 'clear' || this.state === 'upgrade' || this.state === 'spawnpick') target = 0;
     this.pulseT = Math.max(0, this.pulseT - rdt);
     this.ts += (target - this.ts) * Math.min(1, rdt * (target > this.ts ? 20 : 10));
     if (Math.abs(this.ts - target) < .002) this.ts = target;
@@ -1962,6 +2160,8 @@ const G = {
 
     if (this.state === 'build') return this.updateBuild(rdt);
     if (this.state === 'clear') return this.updateClear(rdt);
+    if (this.state === 'upgrade') { FX.update(rdt * .05); return; }
+    if (this.state === 'spawnpick') { if (Input.hit('Mouse0')) this.chooseSpawn(0, nearestSpot(this.spawnPick.spots, Input.mouse.x, Input.mouse.y)); FX.update(rdt * .3); return; }
 
     if (p) p.update(rdt, gdt, this.state === 'play' && p.alive && !this.paused);
     if (this.player2) { this.player2.update(rdt, gdt, this.state === 'play' && this.player2.alive); NET.rin.pressed = {}; }
@@ -2024,6 +2224,8 @@ const G = {
     if (this.seq) this.seq.t += rdt;
     if (this.state === 'build' && this.seq) { animateBlocks(this.seq.t, rdt); FX.update(rdt * .6); return; }
     if (this.state === 'clear') { FX.update(rdt * .08); return; }
+    if (this.state === 'upgrade') { FX.update(rdt * .05); return; }
+    if (this.state === 'spawnpick') { const P = this.spawnPick; if (P && Input.hit('Mouse0')) { const i = nearestSpot(P.spots, Input.mouse.x, Input.mouse.y); if (i >= 0 && P.pickers[1] && P.chosen[1] < 0) { P.chosen[1] = i; NET.send({ t: 'spawn', i }); SFX.uiClick(); } } return; }
     for (const b of this.level.blocks) b.s = 1;
     this.oldBlocks = [];
     p.update(rdt, gdt, this.state === 'play' && p.alive && !this.paused);
@@ -2064,6 +2266,8 @@ const G = {
     }
     if (!best) best = { x: (AX0 + AX1) / 2, y: (AY0 + AY1) / 2 };
     this.pyramid = new Pyramid(best.x, best.y);
+    this.pyramid.red = this.upgradesOn && (this.levelN % 5 === 0 || Math.random() < .1);
+    if (this.pyramid.red) this.hint('A red pyramid! Break it to pick an upgrade.', 5);
     FX.ring(best.x, best.y, { r0: 120, r1: 10, color: INKC, w: 5, life: .6, real: true });
     SFX.pyramid();
     if (this.levelN <= 2) this.hint('Room clear. Break the black pyramid — shoot it, hit it or throw something at it.', 6);
@@ -2084,11 +2288,29 @@ const G = {
     else this.hint('Your friend is down — clear the room to bring them back.', 5);
   },
   onPyramidBroken() {
-    this.state = 'clear'; this.seq = { t: 0, word: -1 };
+    const red = this.pyramid && this.pyramid.red;
     for (const b of this.bullets) b.dead = true;
+    // SECOND WIND: a heart back every 3 levels
+    if (NET.active && this.levelN % 3 === 0) for (const i of [0, 1]) if (this.runUps[i].has('heart') && this.hearts < MP_HEARTS) { this.hearts++; FX.text('+1 HEART', W / 2, 330, { size: 32, life: 1.4, color: '#ffb3ad' }); }
+    if (red) {
+      this.state = 'upgrade'; this.seq = null;
+      this.offers = [rollOffers(0), rollOffers(1)];
+      this.picked = [!this.offers[0].length, !this.players.find(q => q.slot === 1) || !this.offers[1].length];
+      if (!this.picked[0]) showUpgradeCards(this.offers[0], k => this.pickUpgrade(0, k), 'h' + this.ls);
+      if (this.picked.every(Boolean)) this.goClear();
+    } else this.goClear();
     const best = store.get(BEST_KEY, 0); if (!NET.active && this.levelN > best) store.set(BEST_KEY, this.levelN);
     if (!NET.active) store.set(SAVE_KEY, this.levelN + 1);
     this.hintT = 0;
+  },
+  pickUpgrade(slot, k) {
+    if (this.state !== 'upgrade' || this.picked[slot] || !this.offers[slot].includes(k)) return;
+    this.runUps[slot].add(k); this.picked[slot] = true; this.saveRun();
+    if (slot === 0 && !this.picked.every(Boolean)) $('upWait').textContent = 'Waiting for your friend to pick…';
+    if (this.picked.every(Boolean)) { hideUpgradeCards(); this.goClear(); }
+  },
+  goClear() {
+    this.state = 'clear'; this.seq = { t: 0, word: -1 };
   },
 
   /* ---------- the room rising / changing ---------- */
@@ -2101,7 +2323,27 @@ const G = {
       S.itemsIn = true; this.populate();
       if (S.mode === 'morph') for (const q of this.players) { q.visible = true; this.teleportFx(q.x, q.y); }
     }
-    if (S.t >= S.dur) { for (const b of this.level.blocks) b.s = 1; this.startPlay(); }
+    if (S.t >= S.dur) {
+      for (const b of this.level.blocks) b.s = 1;
+      // PICK YOUR SPAWN: anyone who owns it chooses a spot before the level starts
+      const pickers = [0, 1].map(i => !!this.players.find(q => q.slot === i) && this.runUps[i].has('spawn'));
+      if (pickers.some(Boolean)) { this.state = 'spawnpick'; this.seq = null; this.spawnPick = { spots: spawnSpotsFor(this.level), pickers, chosen: [-1, -1], mySlot: 0 }; this.player.visible = true; return; }
+      this.startPlay();
+    }
+  },
+  chooseSpawn(slot, i) {
+    const P = this.spawnPick; if (!P || !P.pickers[slot] || P.chosen[slot] >= 0 || !P.spots[i]) return;
+    P.chosen[slot] = i; SFX.uiClick();
+    if (P.pickers.every((v, k) => !v || P.chosen[k] >= 0)) {
+      for (const q of this.players) {
+        if (!P.pickers[q.slot]) continue;
+        let [x, y] = P.spots[P.chosen[q.slot]];
+        const other = this.players.find(o => o !== q && dist(o.x, o.y, x, y) < 30);
+        if (other) x += 38;
+        q.x = x; q.y = y; q.vx = q.vy = 0; q.net = null; this.teleportFx(x, y);
+      }
+      this.tp++; this.spawnPick = null; this.startPlay();
+    }
   },
   teleportFx(x, y) {
     FX.ring(x, y, { r0: 70, r1: 6, color: INKC, w: 5, life: .45, real: true });
@@ -2184,6 +2426,16 @@ const G = {
     const hx = lerp(x1, x2, bt), hy = lerp(y1, y2, bt), a = Math.atan2(b.vy, b.vx), dx = Math.cos(a), dy = Math.sin(a);
     switch (best.kind) {
       case 'wall': case 'out':
+        if (b.bounces > 0) {   // RICOCHET: bounce once, break on the next wall
+          b.bounces--;
+          let flipX;
+          if (best.kind === 'out') flipX = x2 < AX0 || x2 > AX1;
+          else { const R = best.ref, dl = Math.abs(hx - R.x), dr = Math.abs(hx - R.x - R.w), dt = Math.abs(hy - R.y), db = Math.abs(hy - R.y - R.d); flipX = Math.min(dl, dr) < Math.min(dt, db); }
+          if (flipX) b.vx = -b.vx; else b.vy = -b.vy;
+          b.x = hx - dx * 1.5; b.y = hy - dy * 1.5; b.ox = b.x; b.oy = b.y;
+          FX.sparks(hx, hy, GUN_H, { n: 6, color: '#ffffff', size: 2.2 }); SFX.clink(hx);
+          return true;
+        }
         b.dead = true;
         FX.sparks(hx, hy, GUN_H, { n: 5, angle: a + Math.PI, spread: 1.1, color: INKC, smin: 80, smax: 260 });
         FX.add({ type: 'puff', x: hx, y: hy, z: GUN_H, life: .5, size: 5, color: '#9aa1b8', g: 0 });
@@ -2291,6 +2543,8 @@ const G = {
     }
     if (this.state === 'play') for (const q of this.players) if (q.alive && q.chargeTarget && q.chargeTarget.alive !== false) drawMindLines(c, q);
     for (const it of this.items) if (it.state === 'pulled' && it.pulledBy) drawPullTrail(c, it.pulledBy, it);
+    for (const it of this.items) if (it.state === 'flying' && it.steer) drawPullTrail(c, it.steer, it);
+    if (this.state === 'play') for (const q of this.players) if (q.alive && q.jamTarget) drawJamMark(c, q.jamTarget);
     FX.drawAir(c);
     c.setTransform(RS, 0, 0, RS, 0, 0);
     // time overlay: the world goes a touch cold and still when you stop
@@ -2301,8 +2555,9 @@ const G = {
     }
     if (this.state !== 'menu') this.drawHud(c);
     if (this.state === 'clear') this.drawChant(c);
+    if (this.state === 'spawnpick' && this.spawnPick) drawSpawnPick(c, this.spawnPick);
     if (FX.flashA > 0) { c.fillStyle = hexA(FX.flashColor, FX.flashA * .7); c.fillRect(0, 0, W, H); }
-    if ((this.state === 'play' || this.state === 'build') && !this.paused) drawCrosshair(c, Input.mouse.x, Input.mouse.y);
+    if ((this.state === 'play' || this.state === 'build' || this.state === 'spawnpick') && !this.paused) drawCrosshair(c, Input.mouse.x, Input.mouse.y);
   },
   drawHud(c) {
     const p = this.player;
@@ -2332,7 +2587,7 @@ const G = {
         if (it.def.gun) {
           const n = it.def.ammo, w = Math.min(14, 140 / n);
           if (it.ammo === 0) { c.fillStyle = '#ec3340'; c.font = '600 13px Fredoka, sans-serif'; c.fillText(Math.floor(G.realT * 3) % 2 ? 'EMPTY · RIGHT-CLICK TO THROW' : 'EMPTY · RIGHT-CLICK TO THROW', bx + 104, by + 41); }
-          else for (let i = 0; i < n; i++) { const x = bx + 106 + i * w, full = i < it.ammo; roundRect(c, x, by + 33, w - 4, 15, 3); c.fillStyle = full ? INKC : '#ffffff'; c.fill(); c.strokeStyle = INKC; c.lineWidth = 2; c.stroke(); }
+          else for (let i = 0; i < n; i++) { const x = bx + 106 + i * w, full = i < it.ammo, blue = full && i >= it.ammo - (it.blue || 0); roundRect(c, x, by + 33, w - 4, 15, 3); c.fillStyle = blue ? BLUE : (full ? INKC : '#ffffff'); c.fill(); c.strokeStyle = INKC; c.lineWidth = 2; c.stroke(); }
         } else { c.fillStyle = '#6a708c'; c.font = '500 13px Fredoka, sans-serif'; c.fillText(it.def.melee ? 'click to swing · right-click to throw' : 'right-click to throw · blocks ' + it.hp + (it.hp > 1 ? ' shots' : ' shot'), bx + 104, by + 41); }
       } else {
         c.fillStyle = INKC; c.font = '700 19px Fredoka, sans-serif'; c.textAlign = 'center'; c.fillText('BARE HANDS', bx + bw / 2, by + 21);
@@ -2354,6 +2609,16 @@ const G = {
     roundRect(c, tx + 58, ly, 140, 16, 7); c.fillStyle = '#ffffff'; c.fill();
     if (lk > .01) { roundRect(c, tx + 58, ly, Math.max(9, 140 * lk), 16, 7); c.fillStyle = lk >= 1 ? INKC : '#9aa1bf'; c.fill(); }
     roundRect(c, tx + 58, ly, 140, 16, 7); c.strokeStyle = INKC; c.lineWidth = 3; c.stroke();
+    let uy = ly + 32;
+    if (p && p.ups.has('jam')) {
+      const jk = 1 - clamp((p.jamCd || 0) / JAM.COOLDOWN, 0, 1);
+      inkText(c, 'JAM', tx + 4, uy + 9, 16, 'left');
+      roundRect(c, tx + 58, uy, 140, 16, 7); c.fillStyle = '#ffffff'; c.fill();
+      if (jk > .01) { roundRect(c, tx + 58, uy, Math.max(9, 140 * jk), 16, 7); c.fillStyle = jk >= 1 ? INKC : '#9aa1bf'; c.fill(); }
+      roundRect(c, tx + 58, uy, 140, 16, 7); c.strokeStyle = INKC; c.lineWidth = 3; c.stroke();
+      uy += 30;
+    }
+    if (p && p.ups.size) inkText(c, [...p.ups].map(k => UPG[k].name).join(' · '), W - 18, uy + 6, 12, 'right', 4);
     // level banner
     if (this.banner) {
       const t = this.banner.t, a = t < .2 ? t / .2 : (t > 2.1 ? 1 - (t - 2.1) / .5 : 1), s = t < .25 ? easeOutBack(t / .25) : 1;
@@ -2479,7 +2744,13 @@ function onGlobalKey(e) {
 }
 function goBack() { if (howBack === 'pause') showScreen('pause'); else { showScreen('menu'); updateMenu(); } }
 function bindBtn(id, fn) { const b = $(id); b.addEventListener('click', e => { AudioSys.init(); SFX.uiClick(); fn(e); }); b.addEventListener('mouseenter', () => SFX.uiHover()); }
-bindBtn('btnNew', () => G.newGame());
+let setupUpg = store.get('stillshot_upg_pref', false), mpUpg = false;
+function updateSetup() { $('btnUpgToggle').firstChild.textContent = 'Upgrades: ' + (setupUpg ? 'On' : 'Off'); $('btnMpUpg').textContent = 'Upgrades: ' + (mpUpg ? 'On' : 'Off'); }
+bindBtn('btnNew', () => { updateSetup(); showScreen('setup'); });
+bindBtn('btnUpgToggle', () => { setupUpg = !setupUpg; store.set('stillshot_upg_pref', setupUpg); updateSetup(); });
+bindBtn('btnSetupStart', () => G.newGame(setupUpg));
+bindBtn('btnSetupBack', () => { showScreen('menu'); updateMenu(); });
+bindBtn('btnMpUpg', () => { mpUpg = !mpUpg; updateSetup(); });
 bindBtn('btnContinue', () => G.continueGame());
 bindBtn('btnHow', () => { howBack = 'menu'; showScreen('how'); });
 /* ---------- co-op lobby ---------- */
@@ -2502,7 +2773,7 @@ bindBtn('btnHost', () => { $('btnMpStart').disabled = true; $('mpHostStatus').te
 bindBtn('btnJoinShow', () => { mpView('join'); $('mpJoinStatus').textContent = ''; setTimeout(() => $('mpInput').focus(), 50); });
 bindBtn('btnJoin', () => NET.joinGame($('mpInput').value));
 $('mpInput').addEventListener('keydown', e => { if (e.code === 'Enter') NET.joinGame($('mpInput').value); });
-bindBtn('btnMpStart', () => { if (NET.active && NET.host) G.startCoop(1); });
+bindBtn('btnMpStart', () => { if (NET.active && NET.host) G.startCoop(1, mpUpg); });
 bindBtn('btnMpBack', () => { NET.close(); showScreen('menu'); updateMenu(); });
 bindBtn('btnSound', () => { AudioSys.setMuted(!AudioSys.muted); updateMenu(); });
 bindBtn('btnResume', () => togglePause(false));
