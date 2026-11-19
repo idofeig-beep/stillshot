@@ -50,6 +50,9 @@
   .code{font-size:64px;font-weight:700;letter-spacing:.22em;color:#fff;-webkit-text-stroke:8px #1c1e33;paint-order:stroke fill;margin:4px 0 2px;user-select:text;-webkit-user-select:text;}
   #mpInput{font-family:'Fredoka',sans-serif;font-size:30px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;width:190px;text-align:center;border:4px solid #1c1e33;border-radius:14px;padding:6px 8px;outline:none;color:#1c1e33;}
   .mbtn:disabled{opacity:.45;cursor:default;transform:none;background:#fff;color:#1c1e33;}
+  .ghlink{position:absolute;bottom:22px;right:26px;color:#1c1e33;font-weight:600;font-size:16px;text-decoration:none;background:#fff;border:3px solid #1c1e33;border-radius:12px;padding:5px 12px;box-shadow:0 3px 0 #1c1e33;user-select:text;-webkit-user-select:text;}
+  .ghlink:hover{background:#ff3b3b;color:#fff;}
+  .ghl2{color:#ffd84a;font-weight:700;user-select:text;-webkit-user-select:text;}
   .hintkey{font-size:16px;font-weight:600;color:#1c1e33;margin-top:10px;}
 </style>
 </head>
@@ -70,6 +73,7 @@
       <button class="mbtn" id="btnSound">Sound: On</button>
     </nav>
     <div class="best" id="bestInfo"></div>
+    <a class="ghlink" href="https://idofeig-beep.github.io/stillshot/" target="_blank" rel="noopener">play online: idofeig-beep.github.io/stillshot</a>
   </div>
 
   <div id="how" class="screen dim">
@@ -93,7 +97,7 @@
   <div id="mp" class="screen dim">
     <div class="panel" style="text-align:center;min-width:560px">
       <h2 style="font-size:34px;letter-spacing:.12em">CO-OP</h2>
-      <div class="note">Two players, one room. Time moves whenever <b>either</b> of you moves.<br>You share <span class="r">5 hearts</span>: when you both go down, one heart is lost and the room restarts.<br>Every co-op game is a new run from level 1.</div>
+      <div class="note">Two players, one room. Time moves whenever <b>either</b> of you moves.<br>You share <span class="r">5 hearts</span>: when you both go down, one heart is lost and the room restarts.<br>Every co-op game is a new run from level 1.<br>Both of you open <a class="ghl2" href="https://idofeig-beep.github.io/stillshot/" target="_blank" rel="noopener">idofeig-beep.github.io/stillshot</a></div>
       <div id="mpChoose" class="row" style="justify-content:center;margin-top:14px"><button class="mbtn" id="btnHost" style="min-width:200px">Host</button><button class="mbtn" id="btnJoinShow" style="min-width:200px">Join</button></div>
       <div id="mpHost" hidden>
         <div class="note" style="margin-top:12px">Send your friend this code</div>
@@ -1573,7 +1577,7 @@ const NET = {
       peer.on('connection', c => { if (this.conn) { c.close(); return; } this.attach(c, 'host'); });
       peer.on('error', e => {
         if (e.type === 'unavailable-id') { this.hostGame(); return; }
-        this.status('Connection problem (' + e.type + '). Multiplayer works on the GitHub link.', 'host');
+        this.status('Connection problem (' + e.type + '). Co-op works on idofeig-beep.github.io/stillshot', 'host');
       });
     });
     return this.code;
