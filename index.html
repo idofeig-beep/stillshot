@@ -1390,10 +1390,10 @@ class Player {
   fireOnce() {
     const it = this.held; if (!it || !it.def.gun || it.ammo <= 0) { this.burstLeft = 0; return; }
     const d = it.def; it.ammo--; it.blue = Math.min(it.blue || 0, it.ammo); this.burstLeft--; this.burstT = d.burstGap || 0;
-    const sx = this.x, sy = this.y, spMul = this.ups.has('fastbullet') ? 1.3 : 1, bounces = this.ups.has('ricochet') ? 1 : 0;
+    const sx = this.x, sy = this.y, spMul = this.ups.has('fastbullet') ? 1.3 : 1, bounces = this.ups.has('ricochet') ? 2 : 0;
     for (let i = 0; i < d.pellets; i++) {
       const a = this.aim + (d.pellets > 1 ? lerp(-d.spread / 2, d.spread / 2, i / (d.pellets - 1)) + rand(-.03, .03) : rand(-d.spread, d.spread));
-      const b = new Bullet(sx, sy, a, d.speed * spMul * (d.pellets > 1 ? rand(.9, 1.08) : 1), 'p', this, { life: (d.life || 3) * (bounces ? 1.4 : 1), pierce: d.pierce || 0, bounces });
+      const b = new Bullet(sx, sy, a, d.speed * spMul * (d.pellets > 1 ? rand(.9, 1.08) : 1), 'p', this, { life: (d.life || 3) * (bounces ? 1.8 : 1), pierce: d.pierce || 0, bounces });
       G.bullets.push(b); b.update(24 / b.speed());
     }
     const mx = this.x + Math.cos(this.aim) * 26, my = this.y + Math.sin(this.aim) * 26;
@@ -1947,7 +1947,7 @@ function guestLevel(S) {
    ========================================================= */
 const BLUE = '#3b82f6';
 const UPG = {
-  ricochet: { name: 'RICOCHET', desc: 'Bullets from your guns bounce off a wall once. They break on the second wall they hit. A short line shows where your shot will bounce.' },
+  ricochet: { name: 'RICOCHET', desc: 'Bullets from your guns bounce off 2 walls. They break on the third wall they hit. A short line shows where your shot will bounce.' },
   fastbullet: { name: 'FAST BULLETS', desc: 'Bullets from your guns fly 30% faster.' },
   refill: { name: 'REFILL', desc: 'The first time you pick up a gun, it gets 2 extra bullets, even past full. They show in blue. A gun you already held does not refill.' },
   heart: { name: 'SECOND WIND', desc: 'Your team gets 1 heart back every 3 levels, up to 5.', coop: true },
@@ -2461,7 +2461,7 @@ const G = {
     const hx = lerp(x1, x2, bt), hy = lerp(y1, y2, bt), a = Math.atan2(b.vy, b.vx), dx = Math.cos(a), dy = Math.sin(a);
     switch (best.kind) {
       case 'wall': case 'out':
-        if (b.bounces > 0) {   // RICOCHET: bounce once, break on the next wall
+        if (b.bounces > 0) {   // RICOCHET: bounce off 2 walls, break on the third
           b.bounces--;
           let flipX;
           if (best.kind === 'out') flipX = x2 < AX0 || x2 > AX1;
